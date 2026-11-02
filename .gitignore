@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.local
+*.gba
+*.zip
+*.sav
+pokeemeraldplusplus-v10-1.ups
+tools/cache

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="description" content="Emerald++ on your home screen. English or German names. Menus stay English.">
+    <meta name="theme-color" content="#07140c">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <link rel="icon" href="/icons/icon-192.png">
+    <title>Emerald</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="game" hidden></div>
+    <div id="chrome" hidden>
+      <span id="status">On this device</span>
+      <button id="export" type="button">Save file</button>
+      <button id="names" type="button">Names</button>
+      <button id="out" type="button">Sign out</button>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
