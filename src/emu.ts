@@ -96,6 +96,27 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     threads: false,
     controlScheme: "gba",
     language: "en-US",
+    // L/R/Select/Start/Fast/Slow stay in the bottom strip. Only A/B and the
+    // D-pad sit on the sides of the game.
+    VirtualGamepadSettings: [
+      { type: "button", text: "B", id: "b", location: "right", left: 10, top: 70, bold: true, input_value: 0 },
+      { type: "button", text: "A", id: "a", location: "right", left: 81, top: 40, bold: true, input_value: 8 },
+      {
+        type: "dpad",
+        id: "dpad",
+        location: "left",
+        left: "50%",
+        top: "50%",
+        joystickInput: false,
+        inputValues: [4, 5, 6, 7],
+      },
+      { type: "button", text: "L", id: "l", location: "center", left: -95, fontSize: 15, bold: true, block: true, input_value: 10 },
+      { type: "button", text: "Select", id: "select", location: "center", left: -30, fontSize: 13, block: true, input_value: 2 },
+      { type: "button", text: "Start", id: "start", location: "center", left: 45, fontSize: 13, block: true, input_value: 3 },
+      { type: "button", text: "R", id: "r", location: "center", left: 115, fontSize: 15, bold: true, block: true, input_value: 11 },
+      { type: "button", text: "Fast", id: "speed_fast", location: "center", left: -30, top: 42, fontSize: 13, block: true, input_value: 27 },
+      { type: "button", text: "Slow", id: "speed_slow", location: "center", left: 80, top: 42, fontSize: 13, block: true, input_value: 29 },
+    ],
     buttonOpts: {
       playPause: false,
       restart: false,

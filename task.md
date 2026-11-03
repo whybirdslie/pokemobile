@@ -10,7 +10,8 @@ iPhone 15 Pro PWA for Emerald++. The patched ROM stays off Cloudflare. German na
 
 ## Done
 
-- Vite app, landscape home-screen manifest, service worker, touch layout
+- Vite app, any-orientation home-screen manifest, service worker, touch layout
+- Chrome is a hamburger menu. Portrait game sits under that bar. Landscape keeps only D-pad and A/B on the game; Select/Start/L/R/Fast/Slow sit in the bottom strip clear of the Dynamic Island
 - EmulatorJS 4.2.3 mGBA, threads off, vendored under `public/data`
 - Core boot needs `compression/extract7z.js`, both wasm cores, and `cores/reports/mgba.json` with `defaultWebGL2`
 - Language screen: English names or German names. Menus stay English
@@ -21,6 +22,8 @@ iPhone 15 Pro PWA for Emerald++. The patched ROM stays off Cloudflare. German na
 ## Still do in the Supabase dashboard
 
 Sign-in is email plus password inside the home screen app. The confirm link only verifies the address, because Mail opens Safari and that browser does not share the home screen login.
+
+`jeffreycheung2000@hotmail.com` is already confirmed. A second Create account does not change the password or send mail. On 2026-11-03 the stored password was replaced in `auth.users` after the built-in mailer hit its rate limit. Sign in on the home screen with that password.
 
 1. Authentication → URL Configuration → Site URL = `https://pokemobile.pages.dev`
 2. Add Redirect URL `https://pokemobile.pages.dev/**`

@@ -20,6 +20,8 @@ const app = document.querySelector<HTMLElement>("#app")!
 const game = document.querySelector<HTMLElement>("#game")!
 const chrome = document.querySelector<HTMLElement>("#chrome")!
 const status = document.querySelector<HTMLElement>("#status")!
+const menu = document.querySelector<HTMLElement>("#menu")!
+const menuToggle = document.querySelector<HTMLButtonElement>("#menu-toggle")!
 
 let rom: Uint8Array | null = null
 let language: Lang = "en"
@@ -28,6 +30,15 @@ let timer = 0
 
 function setStatus(text: string) {
   status.textContent = text
+}
+
+function setMenuOpen(open: boolean) {
+  menu.hidden = !open
+  menuToggle.setAttribute("aria-expanded", open ? "true" : "false")
+}
+
+function closeMenu() {
+  setMenuOpen(false)
 }
 
 function panel(html: string) {
@@ -261,6 +272,7 @@ async function play(event: Event) {
   app.hidden = true
   game.hidden = false
   chrome.hidden = false
+  closeMenu()
   setStatus(syncState === "local" ? "On this device" : "Synced")
   const sramBuf = await store.sram()
   try {
@@ -338,7 +350,22 @@ async function afterAuth() {
   await showLanguage()
 }
 
+menuToggle.onclick = (event) => {
+  event.stopPropagation()
+  setMenuOpen(menu.hidden)
+}
+
+menu.onclick = (event) => event.stopPropagation()
+
+document.addEventListener("pointerdown", (event) => {
+  if (menu.hidden || chrome.hidden) return
+  const target = event.target
+  if (target instanceof Node && (chrome.contains(target) || menu.contains(target))) return
+  closeMenu()
+})
+
 document.querySelector<HTMLButtonElement>("#names")!.onclick = () => {
+  closeMenu()
   window.clearInterval(timer)
   void flushSram().finally(() => {
     location.reload()
@@ -346,12 +373,14 @@ document.querySelector<HTMLButtonElement>("#names")!.onclick = () => {
 }
 
 document.querySelector<HTMLButtonElement>("#out")!.onclick = async () => {
+  closeMenu()
   await flushSram()
   await signOut()
   window.location.reload()
 }
 
 document.querySelector<HTMLButtonElement>("#export")!.onclick = async () => {
+  closeMenu()
   const bytes = readSram() ?? (await store.sram())
   if (!bytes) return
   const raw = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)

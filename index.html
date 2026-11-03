@@ -18,10 +18,15 @@
     <div id="app"></div>
     <div id="game" hidden></div>
     <div id="chrome" hidden>
-      <span id="status">On this device</span>
-      <button id="export" type="button">Save file</button>
-      <button id="names" type="button">Names</button>
-      <button id="out" type="button">Sign out</button>
+      <button id="menu-toggle" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div id="menu" hidden>
+        <span id="status">On this device</span>
+        <button id="export" type="button">Save file</button>
+        <button id="names" type="button">Names</button>
+        <button id="out" type="button">Sign out</button>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

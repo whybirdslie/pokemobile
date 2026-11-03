@@ -53,6 +53,9 @@ export async function signUp(email: string, password: string) {
     options: { emailRedirectTo: window.location.origin },
   })
   if (error) throw error
+  if (data.user && (data.user.identities?.length ?? 0) === 0) {
+    throw new Error("That email already has an account. Sign in with the first password. Creating it again does not change it or send another email.")
+  }
   return data.session
 }
 
@@ -61,7 +64,12 @@ export async function sendPasswordLink(email: string) {
   const { error } = await client.auth.resetPasswordForEmail(email, {
     redirectTo: window.location.origin,
   })
-  if (error) throw error
+  if (error) {
+    if (error.message.toLowerCase().includes("rate limit")) {
+      throw new Error("Supabase blocked another email for about an hour. Sign in with the first password, or try the password link later.")
+    }
+    throw error
+  }
 }
 
 export async function setPassword(password: string) {
