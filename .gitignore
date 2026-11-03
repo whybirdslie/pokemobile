@@ -7,3 +7,4 @@ dist
 *.sav
 pokeemeraldplusplus-v10-1.ups
 tools/cache
+tools/.pages-manifest.json
