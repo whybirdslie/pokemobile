@@ -1,5 +1,16 @@
 import "./style.css"
-import { cloudConfigured, onSession, sendCode, session, signOut, verifyCode } from "./auth"
+import {
+  cloudConfigured,
+  onSession,
+  openedFromEmail,
+  recoveryFromEmail,
+  sendPasswordLink,
+  session,
+  setPassword,
+  signIn,
+  signOut,
+  signUp,
+} from "./auth"
 import { noteLocalSram, resolveSync, type SyncState } from "./cloud"
 import { store, type Lang } from "./db"
 import { installSram, prepareRoms, preloadEmulator, readSram, resumeAudio, startPrepared } from "./emu"
@@ -43,28 +54,77 @@ async function tryDevRom() {
   return bytes
 }
 
+function escapeText(value: string) {
+  return value.replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]!)
+}
+
+function isStandalone() {
+  const ios = navigator as Navigator & { standalone?: boolean }
+  return window.matchMedia("(display-mode: standalone)").matches || ios.standalone === true
+}
+
+function readLogin(form: HTMLFormElement) {
+  const data = new FormData(form)
+  const email = data.get("email")
+  const password = data.get("password")
+  if (typeof email !== "string" || typeof password !== "string") return null
+  return { email: email.trim(), password }
+}
+
 function loginScreen(error = "") {
   panel(`
     <form class="panel" id="login">
       <h1>Emerald++</h1>
-      <p>Sign in with the email that should hold this save.</p>
-      <label>Email <input name="email" type="email" autocomplete="email" required></label>
-      <button class="primary" type="submit">Send code</button>
+      <p>Sign in here. The email link only confirms the address. It does not sign in the home screen app.</p>
+      <label>Email <input name="email" type="email" autocomplete="username" required></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" minlength="6" required></label>
+      <button class="primary" type="submit">Sign in</button>
+      <button class="choice" type="button" id="create">Create account</button>
+      <button class="ghost" type="button" id="reset">Email me a password link</button>
       <p class="error" id="err"></p>
       ${cloudConfigured() ? "" : '<button class="ghost" type="button" id="local">Play on this device</button>'}
     </form>
   `)
+  const form = document.querySelector<HTMLFormElement>("#login")!
   const err = document.querySelector<HTMLElement>("#err")!
   err.textContent = error
-  document.querySelector<HTMLFormElement>("#login")!.onsubmit = async (event) => {
+  form.onsubmit = async (event) => {
     event.preventDefault()
-    const email = new FormData(event.currentTarget as HTMLFormElement).get("email")
-    if (typeof email !== "string") return
+    const fields = readLogin(form)
+    if (!fields) return
     try {
-      await sendCode(email.trim())
-      codeScreen(email.trim())
+      await signIn(fields.email, fields.password)
+      await afterAuth()
     } catch (cause) {
-      err.textContent = cause instanceof Error ? cause.message : "Could not send the code"
+      err.textContent = cause instanceof Error ? cause.message : "Could not sign in"
+    }
+  }
+  document.querySelector<HTMLButtonElement>("#create")!.onclick = async () => {
+    const fields = readLogin(form)
+    if (!fields) return
+    if (fields.password.length < 6) {
+      err.textContent = "Use at least 6 characters."
+      return
+    }
+    try {
+      const signedIn = await signUp(fields.email, fields.password)
+      if (signedIn) await afterAuth()
+      else sentScreen(fields.email)
+    } catch (cause) {
+      err.textContent = cause instanceof Error ? cause.message : "Could not create the account"
+    }
+  }
+  document.querySelector<HTMLButtonElement>("#reset")!.onclick = async () => {
+    const email = new FormData(form).get("email")
+    if (typeof email !== "string" || !email.trim()) {
+      err.textContent = "Enter the email first."
+      return
+    }
+    try {
+      await sendPasswordLink(email.trim())
+      sentScreen(email.trim(), "Tap the link, set a password, then come back here and sign in.")
+    } catch (cause) {
+      err.textContent = cause instanceof Error ? cause.message : "Could not send the email"
     }
   }
   document.querySelector<HTMLButtonElement>("#local")?.addEventListener("click", () => {
@@ -72,28 +132,55 @@ function loginScreen(error = "") {
   })
 }
 
-function codeScreen(email: string) {
+function sentScreen(email: string, detail = "Tap the link to confirm the address. Then come back to this app and sign in with your password.") {
   panel(`
-    <form class="panel" id="code">
+    <div class="panel">
       <h1>Check your email</h1>
-      <p>Enter the 6 digit code. Open it here, not from the mail link.</p>
-      <label>Code <input name="token" inputmode="numeric" autocomplete="one-time-code" required></label>
-      <button class="primary" type="submit">Sign in</button>
-      <button class="ghost" type="button" id="back">Back</button>
+      <p>${detail}</p>
+      <p>${escapeText(email)}</p>
+      <button class="ghost" type="button" id="back">Back to sign in</button>
+    </div>
+  `)
+  document.querySelector<HTMLButtonElement>("#back")!.onclick = () => loginScreen()
+}
+
+function browserHandoff() {
+  panel(`
+    <div class="panel">
+      <h1>Email confirmed</h1>
+      <p>This window is not the home screen app. Close it, open Emerald on your home screen, and sign in with your password.</p>
+      <button class="primary" type="button" id="here">Continue in this browser</button>
+    </div>
+  `)
+  document.querySelector<HTMLButtonElement>("#here")!.onclick = () => {
+    void afterAuth()
+  }
+}
+
+function passwordScreen(error = "") {
+  panel(`
+    <form class="panel" id="password">
+      <h1>Set a password</h1>
+      <p>Then close this window and sign in from the home screen app.</p>
+      <label>Password <input name="password" type="password" autocomplete="new-password" minlength="6" required></label>
+      <button class="primary" type="submit">Save password</button>
       <p class="error" id="err"></p>
     </form>
   `)
   const err = document.querySelector<HTMLElement>("#err")!
-  document.querySelector<HTMLButtonElement>("#back")!.onclick = () => loginScreen()
-  document.querySelector<HTMLFormElement>("#code")!.onsubmit = async (event) => {
+  err.textContent = error
+  document.querySelector<HTMLFormElement>("#password")!.onsubmit = async (event) => {
     event.preventDefault()
-    const token = new FormData(event.currentTarget as HTMLFormElement).get("token")
-    if (typeof token !== "string") return
+    const password = new FormData(event.currentTarget as HTMLFormElement).get("password")
+    if (typeof password !== "string" || password.length < 6) {
+      err.textContent = "Use at least 6 characters."
+      return
+    }
     try {
-      await verifyCode(email, token.trim())
-      await afterAuth()
+      await setPassword(password)
+      browserHandoff()
     } catch (cause) {
-      err.textContent = cause instanceof Error ? cause.message : "Code was not accepted"
+      err.textContent = cause instanceof Error ? cause.message : "Could not save the password"
     }
   }
 }
@@ -307,6 +394,14 @@ async function start() {
     return
   }
   const current = await session()
+  if (current && recoveryFromEmail) {
+    passwordScreen()
+    return
+  }
+  if (current && openedFromEmail && !isStandalone()) {
+    browserHandoff()
+    return
+  }
   if (!current) {
     loginScreen()
     return

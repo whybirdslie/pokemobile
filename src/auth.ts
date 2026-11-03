@@ -2,9 +2,21 @@ import { createClient, type Session, type SupabaseClient } from "@supabase/supab
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+const authUrl = `${location.hash}${location.search}`
+
+export const openedFromEmail = /access_token|type=signup|type=magiclink|type=recovery|type=invite|type=email/.test(authUrl)
+export const recoveryFromEmail = /type=recovery/.test(authUrl)
 
 export const supabase: SupabaseClient | null =
-  url && key ? createClient(url, key, { auth: { persistSession: true, detectSessionInUrl: false } }) : null
+  url && key
+    ? createClient(url, key, {
+        auth: {
+          persistSession: true,
+          detectSessionInUrl: true,
+          flowType: "implicit",
+        },
+      })
+    : null
 
 export function cloudConfigured() {
   return supabase != null
@@ -22,15 +34,39 @@ export function onSession(cb: (session: Session | null) => void) {
   return () => data.subscription.unsubscribe()
 }
 
-export async function sendCode(email: string) {
+function requireClient() {
   if (!supabase) throw new Error("Cloud saves are not configured")
-  const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
+  return supabase
+}
+
+export async function signIn(email: string, password: string) {
+  const client = requireClient()
+  const { error } = await client.auth.signInWithPassword({ email, password })
   if (error) throw error
 }
 
-export async function verifyCode(email: string, token: string) {
-  if (!supabase) throw new Error("Cloud saves are not configured")
-  const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" })
+export async function signUp(email: string, password: string) {
+  const client = requireClient()
+  const { data, error } = await client.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: window.location.origin },
+  })
+  if (error) throw error
+  return data.session
+}
+
+export async function sendPasswordLink(email: string) {
+  const client = requireClient()
+  const { error } = await client.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  })
+  if (error) throw error
+}
+
+export async function setPassword(password: string) {
+  const client = requireClient()
+  const { error } = await client.auth.updateUser({ password })
   if (error) throw error
 }
 

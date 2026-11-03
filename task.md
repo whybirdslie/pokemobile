@@ -20,9 +20,11 @@ iPhone 15 Pro PWA for Emerald++. The patched ROM stays off Cloudflare. German na
 
 ## Still do in the Supabase dashboard
 
+Sign-in is email plus password inside the home screen app. The confirm link only verifies the address, because Mail opens Safari and that browser does not share the home screen login.
+
 1. Authentication → URL Configuration → Site URL = `https://pokemobile.pages.dev`
 2. Add Redirect URL `https://pokemobile.pages.dev/**`
-3. Authentication → Email Templates → Magic Link (or Confirm signup) body must include `{{ .Token }}` so the 6 digit code is in the mail. Do not make users open a Safari link
+3. Keep Confirm email on. No custom SMTP.
 
 ## Run
 

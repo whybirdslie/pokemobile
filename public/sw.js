@@ -1,4 +1,4 @@
-const CACHE = "emerald-v2"
+const CACHE = "emerald-v4"
 const FILES = [
   "/",
   "/index.html",
