@@ -1,7 +1,7 @@
 import "./style.css"
 import { cloudConfigured, noteLocalSram, resolveSync, type SyncState } from "./cloud"
 import { store, type Lang } from "./db"
-import { installSram, prepareRoms, preloadEmulator, readSram, resumeAudio, startPrepared } from "./emu"
+import { installSram, prepareRoms, preloadEmulator, readSram, resumeAudio, startPrepared, toggleSpeed } from "./emu"
 import { normalizePhrase, showPhrase, suggestPhrase } from "./phrase"
 import { isPatchedEmerald } from "./rom"
 
@@ -295,6 +295,14 @@ document.querySelector<HTMLButtonElement>("#names")!.onclick = () => {
 document.querySelector<HTMLButtonElement>("#phrase")!.onclick = () => {
   closeMenu()
   showPhraseModal()
+}
+
+for (const which of ["fast", "slow"] as const) {
+  document.querySelector<HTMLButtonElement>(`#${which}`)!.onclick = () => {
+    const state = toggleSpeed(which)
+    document.querySelector<HTMLButtonElement>("#fast")!.setAttribute("aria-pressed", String(state.fast))
+    document.querySelector<HTMLButtonElement>("#slow")!.setAttribute("aria-pressed", String(state.slow))
+  }
 }
 
 document.querySelector<HTMLButtonElement>("#export")!.onclick = async () => {

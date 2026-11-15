@@ -11,7 +11,7 @@ iPhone 15 Pro PWA for Emerald++. The patched ROM stays off Cloudflare. German na
 ## Done
 
 - Vite app, any-orientation home-screen manifest, service worker, touch layout
-- Chrome is a hamburger menu. Portrait game sits under that bar. Landscape keeps only D-pad and A/B on the game; Select/Start/L/R/Fast/Slow sit in the bottom strip clear of the Dynamic Island
+- Chrome is a hamburger menu. Fast and Slow live there. L and Select sit above the D-pad. Start and R sit above A and B. Portrait scales the picture past the screen width so it is taller. Landscape uses the full height.
 - EmulatorJS 4.2.3 mGBA, threads off, vendored under `public/data`
 - Core boot needs `compression/extract7z.js`, both wasm cores, and `cores/reports/mgba.json` with `defaultWebGL2`
 - Language screen: English names or German names. Menus stay English

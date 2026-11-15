@@ -99,8 +99,8 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     // L/R/Select/Start/Fast/Slow stay in the bottom strip. Only A/B and the
     // D-pad sit on the sides of the game.
     VirtualGamepadSettings: [
-      { type: "button", text: "B", id: "b", location: "right", left: 10, top: 70, bold: true, input_value: 0 },
-      { type: "button", text: "A", id: "a", location: "right", left: 81, top: 40, bold: true, input_value: 8 },
+      { type: "button", text: "B", id: "b", location: "right", left: 8, top: 78, bold: true, input_value: 0 },
+      { type: "button", text: "A", id: "a", location: "right", left: 78, top: 34, bold: true, input_value: 8 },
       {
         type: "dpad",
         id: "dpad",
@@ -110,12 +110,10 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
         joystickInput: false,
         inputValues: [4, 5, 6, 7],
       },
-      { type: "button", text: "L", id: "l", location: "center", left: -95, fontSize: 15, bold: true, block: true, input_value: 10 },
-      { type: "button", text: "Select", id: "select", location: "center", left: -30, fontSize: 13, block: true, input_value: 2 },
-      { type: "button", text: "Start", id: "start", location: "center", left: 45, fontSize: 13, block: true, input_value: 3 },
-      { type: "button", text: "R", id: "r", location: "center", left: 115, fontSize: 15, bold: true, block: true, input_value: 11 },
-      { type: "button", text: "Fast", id: "speed_fast", location: "center", left: -30, top: 42, fontSize: 13, block: true, input_value: 27 },
-      { type: "button", text: "Slow", id: "speed_slow", location: "center", left: 80, top: 42, fontSize: 13, block: true, input_value: 29 },
+      { type: "button", text: "L", id: "l", location: "left", left: 0, top: -42, fontSize: 15, bold: true, block: true, input_value: 10 },
+      { type: "button", text: "Select", id: "select", location: "left", left: 52, top: -42, fontSize: 13, block: true, input_value: 2 },
+      { type: "button", text: "Start", id: "start", location: "right", left: 0, top: -42, fontSize: 13, block: true, input_value: 3 },
+      { type: "button", text: "R", id: "r", location: "right", left: 86, top: -42, fontSize: 15, bold: true, block: true, input_value: 11 },
     ],
     buttonOpts: {
       playPause: false,
@@ -187,6 +185,19 @@ export function installSram(bytes: Uint8Array) {
   const savePath = mgr.getSaveFilePath() || "/data/saves/emeraldpp.srm"
   mgr.FS.writeFile(savePath, bytes)
   mgr.loadSaveFiles()
+}
+
+export function toggleSpeed(which: "fast" | "slow") {
+  const player = emu as (Emu & {
+    isFastForward?: boolean
+    isSlowMotion?: boolean
+    gameManager?: { simulateInput?: (player: number, id: number, value: number) => void }
+  }) | null
+  player?.gameManager?.simulateInput?.(0, which === "fast" ? 27 : 29, 1)
+  return {
+    fast: Boolean(player?.isFastForward),
+    slow: Boolean(player?.isSlowMotion),
+  }
 }
 
 export function resumeAudio() {
