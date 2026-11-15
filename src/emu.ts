@@ -28,6 +28,7 @@ declare global {
 
 let pendingSram: Uint8Array | null = null
 let emu: Emu | null = null
+let speed: "off" | "fast" | "slow" = "off"
 let scriptsReady: Promise<void> | null = null
 let prepared: { en: Uint8Array; de: Uint8Array } | null = null
 
@@ -137,6 +138,7 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     },
   })
   emu = player
+  speed = "off"
   player.on("saveDatabaseLoaded", (fs) => {
     writeSram(fs as Fs)
   })
@@ -191,13 +193,20 @@ export function toggleSpeed(which: "fast" | "slow") {
   const player = emu as (Emu & {
     isFastForward?: boolean
     isSlowMotion?: boolean
-    gameManager?: { simulateInput?: (player: number, id: number, value: number) => void }
+    gameManager?: {
+      toggleFastForward?: (on: number) => void
+      toggleSlowMotion?: (on: number) => void
+    }
   }) | null
-  player?.gameManager?.simulateInput?.(0, which === "fast" ? 27 : 29, 1)
-  return {
-    fast: Boolean(player?.isFastForward),
-    slow: Boolean(player?.isSlowMotion),
+  const next = speed === which ? "off" : which
+  player?.gameManager?.toggleFastForward?.(next === "fast" ? 1 : 0)
+  player?.gameManager?.toggleSlowMotion?.(next === "slow" ? 1 : 0)
+  if (player) {
+    player.isFastForward = next === "fast"
+    player.isSlowMotion = next === "slow"
   }
+  speed = next
+  return { fast: speed === "fast", slow: speed === "slow" }
 }
 
 export function resumeAudio() {

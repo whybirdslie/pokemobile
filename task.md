@@ -11,7 +11,7 @@ iPhone 15 Pro PWA for Emerald++. The patched ROM stays off Cloudflare. German na
 ## Done
 
 - Vite app, any-orientation home-screen manifest, service worker, touch layout
-- Chrome is a hamburger menu. Fast and Slow live there. L and Select sit above the D-pad. Start and R sit above A and B. Portrait scales the picture past the screen width so it is taller. Landscape uses the full height.
+- Chrome is a hamburger menu. Fast and Slow toggle off when tapped again. L and Select sit above the D-pad. Start and R sit above A and B. Portrait picture matches the phone width. Landscape size is a slider in the menu, default 92%, saved on the phone.
 - EmulatorJS 4.2.3 mGBA, threads off, vendored under `public/data`
 - Core boot needs `compression/extract7z.js`, both wasm cores, and `cores/reports/mgba.json` with `defaultWebGL2`
 - Language screen: English names or German names. Menus stay English
@@ -22,6 +22,10 @@ iPhone 15 Pro PWA for Emerald++. The patched ROM stays off Cloudflare. German na
 ## Still do in the Supabase dashboard
 
 No account. The game opens on the language screen. Cloud save is a phrase of real words, for example Amber River Lily. The same words on another phone pull that SRAM. The phrase is the key. Worker `pokemobile-saves` stores the file in KV namespace `pokemobile-saves`. R2 was not enabled on the account. Supabase is not used.
+
+## Working notes
+
+- Do not start the local Vite server when editing. Check the phone against Pages after a deploy.
 
 ## Run
 

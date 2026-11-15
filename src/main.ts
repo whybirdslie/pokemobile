@@ -305,6 +305,24 @@ for (const which of ["fast", "slow"] as const) {
   }
 }
 
+const SCALE_KEY = "emerald-land-scale"
+
+function applyLandScale(percent: number) {
+  const clamped = Math.min(100, Math.max(70, Math.round(percent)))
+  document.documentElement.style.setProperty("--land-scale", String(clamped / 100))
+  localStorage.setItem(SCALE_KEY, String(clamped))
+  const readout = document.querySelector("#screen-readout")
+  const range = document.querySelector<HTMLInputElement>("#screen-range")
+  if (readout) readout.textContent = `${clamped}%`
+  if (range && range.value !== String(clamped)) range.value = String(clamped)
+}
+
+const screenRange = document.querySelector<HTMLInputElement>("#screen-range")!
+const saved = localStorage.getItem(SCALE_KEY)
+const storedScale = saved == null ? 92 : Number(saved)
+applyLandScale(Number.isFinite(storedScale) ? storedScale : 92)
+screenRange.oninput = () => applyLandScale(Number(screenRange.value))
+
 document.querySelector<HTMLButtonElement>("#export")!.onclick = async () => {
   closeMenu()
   const bytes = readSram() ?? (await store.sram())

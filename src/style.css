@@ -4,6 +4,7 @@
   font-family: "Segoe UI", system-ui, sans-serif;
   --chrome-bar: 48px;
   --pad-size: 148px;
+  --land-scale: 0.92;
 }
 
 * { box-sizing: border-box; }
@@ -150,7 +151,7 @@ input {
   width: 44px !important;
 }
 
-/* Portrait: game is wider than the phone and clipped, so the picture is taller */
+/* Portrait: picture matches the phone width. No side crop. */
 @media (orientation: portrait) {
   #game {
     top: env(safe-area-inset-top);
@@ -159,10 +160,10 @@ input {
   #game > .ejs_canvas_parent {
     position: absolute !important;
     top: 8px !important;
-    left: 50% !important;
-    width: 128% !important;
-    height: calc(128vw * 2 / 3) !important;
-    transform: translateX(-50%);
+    left: 0 !important;
+    width: 100% !important;
+    height: calc(100vw * 2 / 3) !important;
+    transform: none !important;
   }
 
   #game .ejs_virtualGamepad_left {
@@ -186,6 +187,8 @@ input {
     left: env(safe-area-inset-left) !important;
     width: auto !important;
     height: auto !important;
+    transform: scale(var(--land-scale));
+    transform-origin: center center;
   }
 
   #game .ejs_virtualGamepad_left {
@@ -266,6 +269,23 @@ input {
 #menu button[aria-pressed="true"] {
   background: #1f8a4c;
   color: #f3fff6;
+}
+
+#screen-size {
+  display: grid;
+  gap: 4px;
+  color: #b7d7c0;
+  font-size: 13px;
+}
+
+#screen-size input {
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+}
+
+@media (orientation: portrait) {
+  #screen-size { display: none; }
 }
 
 .phrase {
