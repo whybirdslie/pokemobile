@@ -6,7 +6,7 @@ iPhone 15 Pro PWA for Emerald++. The patched ROM stays off Cloudflare. German na
 
 - GitHub: private `whybirdslie/pokemobile` on `main`
 - Pages: https://pokemobile.pages.dev (Direct Upload project `pokemobile`)
-- Supabase: project `pokemobile` (`wyrkmjmkxqkhzqgrwsdw`, `ap-southeast-1`, $0/month). Table `emerald_saves` with RLS. `.env` is local only
+- Saves: https://pokemobile-saves.jeffreycheung2000.workers.dev KV `pokemobile-saves` (`571c5632799646fe966680fef26f7a1b`). Supabase is unused
 
 ## Done
 
@@ -21,13 +21,7 @@ iPhone 15 Pro PWA for Emerald++. The patched ROM stays off Cloudflare. German na
 
 ## Still do in the Supabase dashboard
 
-Sign-in is email plus password inside the home screen app. The confirm link only verifies the address, because Mail opens Safari and that browser does not share the home screen login.
-
-`jeffreycheung2000@hotmail.com` is already confirmed. A second Create account does not change the password or send mail. On 2026-11-03 the stored password was replaced in `auth.users` after the built-in mailer hit its rate limit. Sign in on the home screen with that password.
-
-1. Authentication → URL Configuration → Site URL = `https://pokemobile.pages.dev`
-2. Add Redirect URL `https://pokemobile.pages.dev/**`
-3. Keep Confirm email on. No custom SMTP.
+No account. The game opens on the language screen. Cloud save is a phrase of real words, for example Amber River Lily. The same words on another phone pull that SRAM. The phrase is the key. Worker `pokemobile-saves` stores the file in KV namespace `pokemobile-saves`. R2 was not enabled on the account. Supabase is not used.
 
 ## Run
 

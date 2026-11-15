@@ -1,19 +1,8 @@
 import "./style.css"
-import {
-  cloudConfigured,
-  onSession,
-  openedFromEmail,
-  recoveryFromEmail,
-  sendPasswordLink,
-  session,
-  setPassword,
-  signIn,
-  signOut,
-  signUp,
-} from "./auth"
-import { noteLocalSram, resolveSync, type SyncState } from "./cloud"
+import { cloudConfigured, noteLocalSram, resolveSync, type SyncState } from "./cloud"
 import { store, type Lang } from "./db"
 import { installSram, prepareRoms, preloadEmulator, readSram, resumeAudio, startPrepared } from "./emu"
+import { normalizePhrase, showPhrase, suggestPhrase } from "./phrase"
 import { isPatchedEmerald } from "./rom"
 
 const app = document.querySelector<HTMLElement>("#app")!
@@ -27,9 +16,17 @@ let rom: Uint8Array | null = null
 let language: Lang = "en"
 let syncState: SyncState = "local"
 let timer = 0
+let draft = suggestPhrase()
 
 function setStatus(text: string) {
   status.textContent = text
+}
+
+async function refreshPhraseButton() {
+  const button = document.querySelector<HTMLButtonElement>("#phrase")
+  if (!button) return
+  const key = await store.phrase()
+  button.textContent = key ? showPhrase(key) : "Save phrase"
 }
 
 function setMenuOpen(open: boolean) {
@@ -63,137 +60,6 @@ async function tryDevRom() {
   if (!(await isPatchedEmerald(bytes))) return null
   await store.setRom(bytes)
   return bytes
-}
-
-function escapeText(value: string) {
-  return value.replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]!)
-}
-
-function isStandalone() {
-  const ios = navigator as Navigator & { standalone?: boolean }
-  return window.matchMedia("(display-mode: standalone)").matches || ios.standalone === true
-}
-
-function readLogin(form: HTMLFormElement) {
-  const data = new FormData(form)
-  const email = data.get("email")
-  const password = data.get("password")
-  if (typeof email !== "string" || typeof password !== "string") return null
-  return { email: email.trim(), password }
-}
-
-function loginScreen(error = "") {
-  panel(`
-    <form class="panel" id="login">
-      <h1>Emerald++</h1>
-      <p>Sign in here. The email link only confirms the address. It does not sign in the home screen app.</p>
-      <label>Email <input name="email" type="email" autocomplete="username" required></label>
-      <label>Password <input name="password" type="password" autocomplete="current-password" minlength="6" required></label>
-      <button class="primary" type="submit">Sign in</button>
-      <button class="choice" type="button" id="create">Create account</button>
-      <button class="ghost" type="button" id="reset">Email me a password link</button>
-      <p class="error" id="err"></p>
-      ${cloudConfigured() ? "" : '<button class="ghost" type="button" id="local">Play on this device</button>'}
-    </form>
-  `)
-  const form = document.querySelector<HTMLFormElement>("#login")!
-  const err = document.querySelector<HTMLElement>("#err")!
-  err.textContent = error
-  form.onsubmit = async (event) => {
-    event.preventDefault()
-    const fields = readLogin(form)
-    if (!fields) return
-    try {
-      await signIn(fields.email, fields.password)
-      await afterAuth()
-    } catch (cause) {
-      err.textContent = cause instanceof Error ? cause.message : "Could not sign in"
-    }
-  }
-  document.querySelector<HTMLButtonElement>("#create")!.onclick = async () => {
-    const fields = readLogin(form)
-    if (!fields) return
-    if (fields.password.length < 6) {
-      err.textContent = "Use at least 6 characters."
-      return
-    }
-    try {
-      const signedIn = await signUp(fields.email, fields.password)
-      if (signedIn) await afterAuth()
-      else sentScreen(fields.email)
-    } catch (cause) {
-      err.textContent = cause instanceof Error ? cause.message : "Could not create the account"
-    }
-  }
-  document.querySelector<HTMLButtonElement>("#reset")!.onclick = async () => {
-    const email = new FormData(form).get("email")
-    if (typeof email !== "string" || !email.trim()) {
-      err.textContent = "Enter the email first."
-      return
-    }
-    try {
-      await sendPasswordLink(email.trim())
-      sentScreen(email.trim(), "Tap the link, set a password, then come back here and sign in.")
-    } catch (cause) {
-      err.textContent = cause instanceof Error ? cause.message : "Could not send the email"
-    }
-  }
-  document.querySelector<HTMLButtonElement>("#local")?.addEventListener("click", () => {
-    void showLanguage()
-  })
-}
-
-function sentScreen(email: string, detail = "Tap the link to confirm the address. Then come back to this app and sign in with your password.") {
-  panel(`
-    <div class="panel">
-      <h1>Check your email</h1>
-      <p>${detail}</p>
-      <p>${escapeText(email)}</p>
-      <button class="ghost" type="button" id="back">Back to sign in</button>
-    </div>
-  `)
-  document.querySelector<HTMLButtonElement>("#back")!.onclick = () => loginScreen()
-}
-
-function browserHandoff() {
-  panel(`
-    <div class="panel">
-      <h1>Email confirmed</h1>
-      <p>This window is not the home screen app. Close it, open Emerald on your home screen, and sign in with your password.</p>
-      <button class="primary" type="button" id="here">Continue in this browser</button>
-    </div>
-  `)
-  document.querySelector<HTMLButtonElement>("#here")!.onclick = () => {
-    void afterAuth()
-  }
-}
-
-function passwordScreen(error = "") {
-  panel(`
-    <form class="panel" id="password">
-      <h1>Set a password</h1>
-      <p>Then close this window and sign in from the home screen app.</p>
-      <label>Password <input name="password" type="password" autocomplete="new-password" minlength="6" required></label>
-      <button class="primary" type="submit">Save password</button>
-      <p class="error" id="err"></p>
-    </form>
-  `)
-  const err = document.querySelector<HTMLElement>("#err")!
-  err.textContent = error
-  document.querySelector<HTMLFormElement>("#password")!.onsubmit = async (event) => {
-    event.preventDefault()
-    const password = new FormData(event.currentTarget as HTMLFormElement).get("password")
-    if (typeof password !== "string" || password.length < 6) {
-      err.textContent = "Use at least 6 characters."
-      return
-    }
-    try {
-      await setPassword(password)
-      browserHandoff()
-    } catch (cause) {
-      err.textContent = cause instanceof Error ? cause.message : "Could not save the password"
-    }
-  }
 }
 
 function missingScreen(message = "Emerald++ is not on this phone yet.") {
@@ -273,7 +139,8 @@ async function play(event: Event) {
   game.hidden = false
   chrome.hidden = false
   closeMenu()
-  setStatus(syncState === "local" ? "On this device" : "Synced")
+  await refreshPhraseButton()
+  setStatus((await store.phrase()) ? "Synced" : "On this phone")
   const sramBuf = await store.sram()
   try {
     startPrepared(language, sramBuf ? new Uint8Array(sramBuf) : null, event)
@@ -294,7 +161,7 @@ async function flushSram() {
   const bytes = readSram()
   if (!bytes) return
   const changed = await noteLocalSram(bytes, language)
-  if (!changed || !cloudConfigured()) return
+  if (!changed || !cloudConfigured() || !(await store.phrase())) return
   setStatus("Uploading")
   try {
     const state = await resolveSync()
@@ -316,9 +183,9 @@ function showConflict() {
   modal.innerHTML = `
     <div class="panel">
       <h1>Two saves</h1>
-      <p>This phone and the cloud both changed. Pick one. The other stays only until you choose.</p>
+      <p>This phone and the phrase both changed. Pick one.</p>
       <button class="primary" type="button" id="keep">Keep this phone</button>
-      <button class="choice" type="button" id="cloud">Use cloud save</button>
+      <button class="choice" type="button" id="cloud">Use the phrase save</button>
     </div>
   `
   document.body.appendChild(modal)
@@ -336,18 +203,71 @@ function showConflict() {
   }
 }
 
-async function afterAuth() {
-  try {
-    syncState = await resolveSync()
-  } catch {
-    syncState = "error"
+function showPhraseModal() {
+  const existing = document.querySelector("#phrase-modal")
+  if (existing) existing.remove()
+  const modal = document.createElement("div")
+  modal.id = "phrase-modal"
+  modal.className = "modal"
+  modal.innerHTML = `
+    <form class="panel" id="phrase-form">
+      <h1>Save phrase</h1>
+      <p>Three words you can say. Use the same words on another phone and the save follows. Anyone who knows the words can open it.</p>
+      <p class="phrase" id="words"></p>
+      <button class="primary" type="submit">Use these words</button>
+      <button class="choice" type="button" id="another">Different words</button>
+      <label>Or type your own
+        <input id="own" name="own" autocomplete="off" placeholder="river moss lantern">
+      </label>
+      <p class="error" id="phrase-err"></p>
+      <button class="ghost" type="button" id="phrase-close">Close</button>
+    </form>
+  `
+  document.body.appendChild(modal)
+  const words = modal.querySelector<HTMLElement>("#words")!
+  const err = modal.querySelector<HTMLElement>("#phrase-err")!
+  const own = modal.querySelector<HTMLInputElement>("#own")!
+  const paint = () => {
+    words.textContent = showPhrase(normalizePhrase(draft) || "")
   }
-  if (syncState === "conflict") {
-    await showLanguage()
-    showConflict()
-    return
+  paint()
+  modal.querySelector<HTMLButtonElement>("#another")!.onclick = () => {
+    draft = suggestPhrase()
+    own.value = ""
+    err.textContent = ""
+    paint()
   }
-  await showLanguage()
+  modal.querySelector<HTMLButtonElement>("#phrase-close")!.onclick = () => modal.remove()
+  modal.querySelector<HTMLFormElement>("#phrase-form")!.onsubmit = async (event) => {
+    event.preventDefault()
+    const typed = own.value.trim()
+    const key = normalizePhrase(typed || draft)
+    if (!key) {
+      err.textContent = "Use 2 to 4 words, letters only."
+      return
+    }
+    await store.setPhrase(key)
+    draft = showPhrase(key)
+    await refreshPhraseButton()
+    modal.remove()
+    if (!cloudConfigured()) {
+      setStatus("On this phone")
+      return
+    }
+    setStatus("Uploading")
+    try {
+      syncState = await resolveSync()
+      setStatus(syncState === "conflict" ? "Save conflict" : "Synced")
+      if (syncState === "conflict") showConflict()
+      if (syncState === "synced") {
+        const bytes = await store.sram()
+        if (bytes && !game.hidden) installSram(new Uint8Array(bytes))
+      }
+    } catch {
+      syncState = "error"
+      setStatus("Sync failed")
+    }
+  }
 }
 
 menuToggle.onclick = (event) => {
@@ -372,11 +292,9 @@ document.querySelector<HTMLButtonElement>("#names")!.onclick = () => {
   })
 }
 
-document.querySelector<HTMLButtonElement>("#out")!.onclick = async () => {
+document.querySelector<HTMLButtonElement>("#phrase")!.onclick = () => {
   closeMenu()
-  await flushSram()
-  await signOut()
-  window.location.reload()
+  showPhraseModal()
 }
 
 document.querySelector<HTMLButtonElement>("#export")!.onclick = async () => {
@@ -417,43 +335,33 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 async function start() {
   rom = (await loadStoredRom()) ?? (await tryDevRom())
   void preloadEmulator()
-  if (!cloudConfigured()) {
-    syncState = "local"
-    await showLanguage()
-    return
+  const phrase = await store.phrase()
+  if (phrase) draft = showPhrase(phrase)
+  if (phrase && cloudConfigured()) {
+    try {
+      syncState = await resolveSync()
+    } catch {
+      syncState = "error"
+    }
   }
-  const current = await session()
-  if (current && recoveryFromEmail) {
-    passwordScreen()
-    return
-  }
-  if (current && openedFromEmail && !isStandalone()) {
-    browserHandoff()
-    return
-  }
-  if (!current) {
-    loginScreen()
-    return
-  }
-  await afterAuth()
+  await showLanguage()
+  if (syncState === "conflict") showConflict()
 }
-
-onSession((next) => {
-  if (!next && cloudConfigured() && !app.hidden) loginScreen()
-})
 
 void start()
 
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && cloudConfigured()) {
+  if (document.visibilityState !== "visible" || !cloudConfigured()) return
+  void store.phrase().then((phrase) => {
+    if (!phrase) return
     void resolveSync().then(async (state) => {
       syncState = state
       if (state === "conflict") showConflict()
       if (state === "synced") {
         const bytes = await store.sram()
-        if (bytes) installSram(new Uint8Array(bytes))
+        if (bytes && !game.hidden) installSram(new Uint8Array(bytes))
         setStatus("Synced")
       }
     })
-  }
+  })
 })

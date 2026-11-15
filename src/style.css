@@ -247,6 +247,14 @@ input {
   line-height: 1.3;
 }
 
+.phrase {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  color: #f3fff6;
+}
+
 .modal {
   position: fixed;
   inset: 0;

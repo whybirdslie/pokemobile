@@ -1,68 +1,50 @@
-import { supabase } from "./auth"
 import { store, type SaveMeta } from "./db"
 import { sha256 } from "./rom"
 
 export type SyncState = "local" | "synced" | "uploading" | "conflict" | "error"
 
-function fromBytea(value: unknown) {
-  if (value instanceof Uint8Array) return value
-  if (value instanceof ArrayBuffer) return new Uint8Array(value)
-  if (typeof value !== "string") throw new Error("Unexpected save format")
-  const hex = value.startsWith("\\x") ? value.slice(2) : ""
-  if (hex) {
-    const out = new Uint8Array(hex.length / 2)
-    for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16)
-    return out
-  }
-  const raw = atob(value)
-  const out = new Uint8Array(raw.length)
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i)
-  return out
+const saveUrl =
+  (import.meta.env.VITE_SAVE_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://pokemobile-saves.jeffreycheung2000.workers.dev"
+
+export function cloudConfigured() {
+  return saveUrl.length > 0
 }
 
-function toHex(bytes: Uint8Array) {
-  let hex = ""
-  for (const b of bytes) hex += b.toString(16).padStart(2, "0")
-  return `\\x${hex}`
-}
-
-async function userId() {
-  if (!supabase) return null
-  const { data } = await supabase.auth.getUser()
-  return data.user?.id ?? null
+function copyBytes(bytes: Uint8Array) {
+  const copy = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(copy).set(bytes)
+  return copy
 }
 
 export async function pushSram(bytes: Uint8Array) {
-  const id = await userId()
-  if (!supabase || !id) return
+  const key = await store.phrase()
+  if (!saveUrl || !key) return
   const hash = await sha256(bytes)
-  const { error } = await supabase.from("emerald_saves").upsert({
-    user_id: id,
-    sav: toHex(bytes),
-    sha256: hash,
-    updated_at: new Date().toISOString(),
+  const res = await fetch(`${saveUrl}/saves/${key}`, {
+    method: "PUT",
+    headers: { "content-type": "application/octet-stream" },
+    body: copyBytes(bytes),
   })
-  if (error) throw error
+  if (!res.ok) throw new Error("Could not upload the save")
   const meta: SaveMeta = {
-    sha256: hash,
+    sha256: res.headers.get("x-sha256") || hash,
     dirty: false,
-    updatedAt: Date.now(),
+    updatedAt: Number(res.headers.get("x-updated-at")) || Date.now(),
     language: (await store.meta())?.language ?? "en",
   }
   await store.setMeta(meta)
 }
 
 export async function pullSram() {
-  const id = await userId()
-  if (!supabase || !id) return null
-  const { data, error } = await supabase
-    .from("emerald_saves")
-    .select("sav, sha256, updated_at")
-    .eq("user_id", id)
-    .maybeSingle()
-  if (error) throw error
-  if (!data) return null
-  return { bytes: fromBytea(data.sav), sha256: data.sha256 as string, updatedAt: Date.parse(data.updated_at as string) }
+  const key = await store.phrase()
+  if (!saveUrl || !key) return null
+  const res = await fetch(`${saveUrl}/saves/${key}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error("Could not download the save")
+  const bytes = new Uint8Array(await res.arrayBuffer())
+  const hash = res.headers.get("x-sha256") || (await sha256(bytes))
+  return { bytes, sha256: hash, updatedAt: Number(res.headers.get("x-updated-at")) || Date.now() }
 }
 
 export async function noteLocalSram(bytes: Uint8Array, language: SaveMeta["language"]) {
@@ -79,9 +61,7 @@ export async function noteLocalSram(bytes: Uint8Array, language: SaveMeta["langu
 }
 
 export async function resolveSync(choice?: "phone" | "cloud"): Promise<SyncState> {
-  if (!supabase) return "local"
-  const id = await userId()
-  if (!id) return "local"
+  if (!saveUrl || !(await store.phrase())) return "local"
   const meta = await store.meta()
   const local = await store.sram()
   const cloud = await pullSram()
@@ -100,22 +80,27 @@ export async function resolveSync(choice?: "phone" | "cloud"): Promise<SyncState
     })
     return "synced"
   }
-  if (!cloud || !local || !meta) return "synced"
-  if (cloud.sha256 === meta.sha256 && !meta.dirty) return "synced"
+  if (!cloud || !local) return "synced"
+  if (meta && cloud.sha256 === meta.sha256 && !meta.dirty) return "synced"
   const localBytes = new Uint8Array(local)
   const localHash = await sha256(localBytes)
   if (localHash === cloud.sha256) {
-    await store.setMeta({ ...meta, sha256: localHash, dirty: false })
+    await store.setMeta({
+      sha256: localHash,
+      dirty: false,
+      updatedAt: meta?.updatedAt ?? cloud.updatedAt,
+      language: meta?.language ?? "en",
+    })
     return "synced"
   }
-  if (meta.dirty && !choice) return "conflict"
-  if (choice === "cloud" || !meta.dirty) {
+  if ((meta?.dirty ?? true) && !choice) return "conflict"
+  if (choice === "cloud" || !meta?.dirty) {
     await store.setSram(cloud.bytes)
     await store.setMeta({
       sha256: cloud.sha256,
       dirty: false,
       updatedAt: cloud.updatedAt,
-      language: meta.language,
+      language: meta?.language ?? "en",
     })
     return "synced"
   }

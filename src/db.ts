@@ -49,4 +49,6 @@ export const store = {
   setSram: (bytes: Uint8Array) => put("sram", new Uint8Array(bytes).buffer),
   meta: () => get<SaveMeta>("meta"),
   setMeta: (meta: SaveMeta) => put("meta", meta),
+  phrase: () => get<string>("phrase"),
+  setPhrase: (phrase: string) => put("phrase", phrase),
 }
