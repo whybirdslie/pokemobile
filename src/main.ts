@@ -1,7 +1,7 @@
 import "./style.css"
 import { cloudConfigured, noteLocalSram, resolveSync, type SyncState } from "./cloud"
 import { store, type Lang } from "./db"
-import { installSram, prepareRoms, preloadEmulator, readSram, resumeAudio, startPrepared, toggleSpeed } from "./emu"
+import { prepareRoms, preloadEmulator, readSram, resumeAudio, startPrepared, toggleSpeed } from "./emu"
 import { normalizePhrase, showPhrase, suggestPhrase } from "./phrase"
 import { isPatchedEmerald } from "./rom"
 
@@ -129,12 +129,7 @@ async function showLanguage() {
 async function play(event: Event) {
   if (!rom) return
   const meta = await store.meta()
-  await store.setMeta({
-    sha256: meta?.sha256 ?? "",
-    dirty: meta?.dirty ?? false,
-    updatedAt: meta?.updatedAt ?? Date.now(),
-    language,
-  })
+  if (meta) await store.setMeta({ ...meta, language })
   app.hidden = true
   game.hidden = false
   chrome.hidden = false
@@ -164,42 +159,11 @@ async function flushSram() {
   if (!changed || !cloudConfigured() || !(await store.phrase())) return
   setStatus("Uploading")
   try {
-    const state = await resolveSync()
-    syncState = state
-    setStatus(state === "conflict" ? "Save conflict" : "Synced")
-    if (state === "conflict") showConflict()
+    syncState = await resolveSync()
+    setStatus("Synced")
   } catch {
     syncState = "error"
     setStatus("Sync failed")
-  }
-}
-
-function showConflict() {
-  const existing = document.querySelector("#conflict")
-  if (existing) return
-  const modal = document.createElement("div")
-  modal.id = "conflict"
-  modal.className = "modal"
-  modal.innerHTML = `
-    <div class="panel">
-      <h1>Two saves</h1>
-      <p>This phone and the phrase both changed. Pick one.</p>
-      <button class="primary" type="button" id="keep">Keep this phone</button>
-      <button class="choice" type="button" id="cloud">Use the phrase save</button>
-    </div>
-  `
-  document.body.appendChild(modal)
-  modal.querySelector<HTMLButtonElement>("#keep")!.onclick = async () => {
-    await resolveSync("phone")
-    modal.remove()
-    setStatus("Synced")
-  }
-  modal.querySelector<HTMLButtonElement>("#cloud")!.onclick = async () => {
-    await resolveSync("cloud")
-    const bytes = await store.sram()
-    if (bytes) installSram(new Uint8Array(bytes))
-    modal.remove()
-    setStatus("Synced")
   }
 }
 
@@ -212,7 +176,7 @@ function showPhraseModal() {
   modal.innerHTML = `
     <form class="panel" id="phrase-form">
       <h1>Save phrase</h1>
-      <p>Three words you can say. Use the same words on another phone and the save follows. Anyone who knows the words can open it.</p>
+      <p>Three words you can say. This phone's save is the one that counts, and the phrase uploads it. A phone with no save yet can load those words. Anyone who knows the words can open it.</p>
       <p class="phrase" id="words"></p>
       <button class="primary" type="submit">Use these words</button>
       <button class="choice" type="button" id="another">Different words</button>
@@ -257,12 +221,7 @@ function showPhraseModal() {
     setStatus("Uploading")
     try {
       syncState = await resolveSync()
-      setStatus(syncState === "conflict" ? "Save conflict" : "Synced")
-      if (syncState === "conflict") showConflict()
-      if (syncState === "synced") {
-        const bytes = await store.sram()
-        if (bytes && !game.hidden) installSram(new Uint8Array(bytes))
-      }
+      setStatus("Synced")
     } catch {
       syncState = "error"
       setStatus("Sync failed")
@@ -297,12 +256,18 @@ document.querySelector<HTMLButtonElement>("#phrase")!.onclick = () => {
   showPhraseModal()
 }
 
-for (const which of ["fast", "slow"] as const) {
-  document.querySelector<HTMLButtonElement>(`#${which}`)!.onclick = () => {
-    const state = toggleSpeed(which)
-    document.querySelector<HTMLButtonElement>("#fast")!.setAttribute("aria-pressed", String(state.fast))
-    document.querySelector<HTMLButtonElement>("#slow")!.setAttribute("aria-pressed", String(state.slow))
-  }
+const speedButtons = document.querySelector<HTMLElement>("#speeds")!
+function paintSpeed(rate: number) {
+  speedButtons.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.rate) === rate))
+  })
+}
+speedButtons.onclick = (event) => {
+  const button = (event.target as HTMLElement | null)?.closest("button")
+  if (!(button instanceof HTMLButtonElement)) return
+  const rate = Number(button.dataset.rate)
+  if (rate !== 1.5 && rate !== 2 && rate !== 3) return
+  paintSpeed(toggleSpeed(rate))
 }
 
 const SCALE_KEY = "emerald-land-scale"
@@ -316,6 +281,24 @@ function applyLandScale(percent: number) {
   if (readout) readout.textContent = `${clamped}%`
   if (range && range.value !== String(clamped)) range.value = String(clamped)
 }
+
+const LIFT_KEY = "emerald-pad-lift"
+
+function applyPadLift(px: number) {
+  const clamped = Math.min(220, Math.max(20, Math.round(px)))
+  document.documentElement.style.setProperty("--pad-lift", `${clamped}px`)
+  localStorage.setItem(LIFT_KEY, String(clamped))
+  const readout = document.querySelector("#pad-readout")
+  const range = document.querySelector<HTMLInputElement>("#pad-range")
+  if (readout) readout.textContent = String(clamped)
+  if (range && range.value !== String(clamped)) range.value = String(clamped)
+}
+
+const padRange = document.querySelector<HTMLInputElement>("#pad-range")!
+const savedLift = localStorage.getItem(LIFT_KEY)
+const storedLift = savedLift == null ? 150 : Number(savedLift)
+applyPadLift(Number.isFinite(storedLift) ? storedLift : 150)
+padRange.oninput = () => applyPadLift(Number(padRange.value))
 
 const screenRange = document.querySelector<HTMLInputElement>("#screen-range")!
 const saved = localStorage.getItem(SCALE_KEY)
@@ -371,7 +354,6 @@ async function start() {
     }
   }
   await showLanguage()
-  if (syncState === "conflict") showConflict()
 }
 
 void start()
@@ -380,14 +362,6 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible" || !cloudConfigured()) return
   void store.phrase().then((phrase) => {
     if (!phrase) return
-    void resolveSync().then(async (state) => {
-      syncState = state
-      if (state === "conflict") showConflict()
-      if (state === "synced") {
-        const bytes = await store.sram()
-        if (bytes && !game.hidden) installSram(new Uint8Array(bytes))
-        setStatus("Synced")
-      }
-    })
+    void flushSram()
   })
 })

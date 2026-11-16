@@ -5,6 +5,7 @@
   --chrome-bar: 48px;
   --pad-size: 148px;
   --land-scale: 0.92;
+  --pad-lift: 150px;
 }
 
 * { box-sizing: border-box; }
@@ -108,6 +109,11 @@ input {
 
 #game[hidden] { display: none; }
 
+#game.hold-input,
+#game.hold-input * {
+  pointer-events: none !important;
+}
+
 #game .ejs_virtualGamepad_parent {
   bottom: 0 !important;
   height: 100% !important;
@@ -133,6 +139,7 @@ input {
   overflow: visible !important;
   width: var(--pad-size) !important;
   height: var(--pad-size) !important;
+  bottom: calc(var(--pad-lift) + env(safe-area-inset-bottom)) !important;
 }
 
 #game .b_l,
@@ -168,12 +175,10 @@ input {
 
   #game .ejs_virtualGamepad_left {
     left: max(16px, env(safe-area-inset-left)) !important;
-    bottom: calc(108px + env(safe-area-inset-bottom)) !important;
   }
 
   #game .ejs_virtualGamepad_right {
     right: max(16px, env(safe-area-inset-right)) !important;
-    bottom: calc(108px + env(safe-area-inset-bottom)) !important;
   }
 }
 
@@ -193,12 +198,10 @@ input {
 
   #game .ejs_virtualGamepad_left {
     left: max(10px, env(safe-area-inset-left)) !important;
-    bottom: max(12px, env(safe-area-inset-bottom)) !important;
   }
 
   #game .ejs_virtualGamepad_right {
     right: max(10px, env(safe-area-inset-right)) !important;
-    bottom: max(12px, env(safe-area-inset-bottom)) !important;
   }
 }
 
@@ -211,6 +214,7 @@ input {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 18px);
 }
 
 #chrome[hidden] { display: none; }
@@ -218,6 +222,7 @@ input {
 #menu-toggle {
   width: 44px;
   height: 44px;
+  flex: none;
   border-radius: 12px;
   border: 1px solid #245536;
   background: rgba(7, 20, 12, 0.88);
@@ -239,10 +244,16 @@ input {
   display: grid;
   gap: 8px;
   min-width: 168px;
+  min-height: 0;
+  max-width: min(280px, calc(100vw - 24px));
   padding: 10px;
   border-radius: 14px;
   border: 1px solid #245536;
   background: rgba(7, 20, 12, 0.94);
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 #menu[hidden] { display: none; }
@@ -271,14 +282,27 @@ input {
   color: #f3fff6;
 }
 
-#screen-size {
+#speeds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+#speeds button {
+  text-align: center;
+  padding-inline: 0;
+}
+
+#screen-size,
+#pad-height {
   display: grid;
   gap: 4px;
   color: #b7d7c0;
   font-size: 13px;
 }
 
-#screen-size input {
+#screen-size input,
+#pad-height input {
   width: 100%;
   min-height: 32px;
   padding: 0;
@@ -299,9 +323,28 @@ input {
 .modal {
   position: fixed;
   inset: 0;
-  z-index: 8;
-  display: grid;
-  place-items: center;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   background: rgba(0, 0, 0, 0.55);
-  padding: 20px;
+  padding:
+    calc(12px + env(safe-area-inset-top))
+    calc(12px + env(safe-area-inset-right))
+    calc(12px + env(safe-area-inset-bottom))
+    calc(12px + env(safe-area-inset-left));
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  pointer-events: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modal .panel {
+  margin-block: auto;
+  flex: none;
+}
+
+.modal button {
+  touch-action: manipulation;
 }

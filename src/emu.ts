@@ -28,7 +28,7 @@ declare global {
 
 let pendingSram: Uint8Array | null = null
 let emu: Emu | null = null
-let speed: "off" | "fast" | "slow" = "off"
+let speed = 0
 let scriptsReady: Promise<void> | null = null
 let prepared: { en: Uint8Array; de: Uint8Array } | null = null
 
@@ -101,7 +101,7 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     // D-pad sit on the sides of the game.
     VirtualGamepadSettings: [
       { type: "button", text: "B", id: "b", location: "right", left: 8, top: 78, bold: true, input_value: 0 },
-      { type: "button", text: "A", id: "a", location: "right", left: 78, top: 34, bold: true, input_value: 8 },
+      { type: "button", text: "A", id: "a", location: "right", left: 56, top: 34, bold: true, input_value: 8 },
       {
         type: "dpad",
         id: "dpad",
@@ -138,7 +138,7 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     },
   })
   emu = player
-  speed = "off"
+  speed = 0
   player.on("saveDatabaseLoaded", (fs) => {
     writeSram(fs as Fs)
   })
@@ -189,24 +189,33 @@ export function installSram(bytes: Uint8Array) {
   mgr.loadSaveFiles()
 }
 
-export function toggleSpeed(which: "fast" | "slow") {
+export function toggleSpeed(rate: 1.5 | 2 | 3) {
   const player = emu as (Emu & {
     isFastForward?: boolean
     isSlowMotion?: boolean
     gameManager?: {
       toggleFastForward?: (on: number) => void
       toggleSlowMotion?: (on: number) => void
+      setFastForwardRatio?: (ratio: number) => void
     }
   }) | null
-  const next = speed === which ? "off" : which
-  player?.gameManager?.toggleFastForward?.(next === "fast" ? 1 : 0)
-  player?.gameManager?.toggleSlowMotion?.(next === "slow" ? 1 : 0)
+  const next = speed === rate ? 0 : rate
+  const mgr = player?.gameManager
+  mgr?.toggleSlowMotion?.(0)
+  mgr?.toggleFastForward?.(0)
   if (player) {
-    player.isFastForward = next === "fast"
-    player.isSlowMotion = next === "slow"
+    player.isFastForward = next !== 0
+    player.isSlowMotion = false
   }
   speed = next
-  return { fast: speed === "fast", slow: speed === "slow" }
+  if (next !== 0) {
+    mgr?.setFastForwardRatio?.(next)
+    window.setTimeout(() => {
+      if (speed !== next) return
+      mgr?.toggleFastForward?.(1)
+    }, 10)
+  }
+  return speed
 }
 
 export function resumeAudio() {

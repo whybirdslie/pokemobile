@@ -1,7 +1,7 @@
 import { store, type SaveMeta } from "./db"
 import { sha256 } from "./rom"
 
-export type SyncState = "local" | "synced" | "uploading" | "conflict" | "error"
+export type SyncState = "local" | "synced" | "uploading" | "error"
 
 const saveUrl =
   (import.meta.env.VITE_SAVE_URL as string | undefined)?.replace(/\/$/, "") ||
@@ -17,6 +17,16 @@ function copyBytes(bytes: Uint8Array) {
   return copy
 }
 
+async function rememberSync(hash: string, updatedAt: number, language: SaveMeta["language"]) {
+  await store.setMeta({
+    sha256: hash,
+    base: hash,
+    dirty: false,
+    updatedAt,
+    language,
+  })
+}
+
 export async function pushSram(bytes: Uint8Array) {
   const key = await store.phrase()
   if (!saveUrl || !key) return
@@ -27,13 +37,11 @@ export async function pushSram(bytes: Uint8Array) {
     body: copyBytes(bytes),
   })
   if (!res.ok) throw new Error("Could not upload the save")
-  const meta: SaveMeta = {
-    sha256: res.headers.get("x-sha256") || hash,
-    dirty: false,
-    updatedAt: Number(res.headers.get("x-updated-at")) || Date.now(),
-    language: (await store.meta())?.language ?? "en",
-  }
-  await store.setMeta(meta)
+  await rememberSync(
+    res.headers.get("x-sha256") || hash,
+    Number(res.headers.get("x-updated-at")) || Date.now(),
+    (await store.meta())?.language ?? "en",
+  )
 }
 
 export async function pullSram() {
@@ -47,63 +55,52 @@ export async function pullSram() {
   return { bytes, sha256: hash, updatedAt: Number(res.headers.get("x-updated-at")) || Date.now() }
 }
 
+function syncedBase(meta: SaveMeta | null) {
+  if (!meta) return undefined
+  if (meta.base) return meta.base
+  if (!meta.dirty && meta.sha256) return meta.sha256
+  return undefined
+}
+
 export async function noteLocalSram(bytes: Uint8Array, language: SaveMeta["language"]) {
   const hash = await sha256(bytes)
   const prev = await store.meta()
+  const base = syncedBase(prev)
   await store.setSram(bytes)
   await store.setMeta({
     sha256: hash,
-    dirty: prev?.sha256 !== hash,
+    base,
+    dirty: base ? hash !== base : Boolean(prev?.dirty),
     updatedAt: Date.now(),
     language,
   })
   return prev?.sha256 !== hash
 }
 
-export async function resolveSync(choice?: "phone" | "cloud"): Promise<SyncState> {
+export async function resolveSync(): Promise<SyncState> {
   if (!saveUrl || !(await store.phrase())) return "local"
   const meta = await store.meta()
+  const language = meta?.language ?? "en"
   const local = await store.sram()
+  if (local && local.byteLength >= 64) {
+    const localBytes = new Uint8Array(local)
+    const localHash = await sha256(localBytes)
+    let cloudHash = ""
+    try {
+      cloudHash = (await pullSram())?.sha256 ?? ""
+    } catch {
+      cloudHash = ""
+    }
+    if (cloudHash === localHash) {
+      await rememberSync(localHash, meta?.updatedAt ?? Date.now(), language)
+      return "synced"
+    }
+    await pushSram(localBytes)
+    return "synced"
+  }
   const cloud = await pullSram()
-  if (!local && !cloud) return "synced"
-  if (!cloud && local) {
-    await pushSram(new Uint8Array(local))
-    return "synced"
-  }
-  if (cloud && !local) {
-    await store.setSram(cloud.bytes)
-    await store.setMeta({
-      sha256: cloud.sha256,
-      dirty: false,
-      updatedAt: cloud.updatedAt,
-      language: meta?.language ?? "en",
-    })
-    return "synced"
-  }
-  if (!cloud || !local) return "synced"
-  if (meta && cloud.sha256 === meta.sha256 && !meta.dirty) return "synced"
-  const localBytes = new Uint8Array(local)
-  const localHash = await sha256(localBytes)
-  if (localHash === cloud.sha256) {
-    await store.setMeta({
-      sha256: localHash,
-      dirty: false,
-      updatedAt: meta?.updatedAt ?? cloud.updatedAt,
-      language: meta?.language ?? "en",
-    })
-    return "synced"
-  }
-  if ((meta?.dirty ?? true) && !choice) return "conflict"
-  if (choice === "cloud" || !meta?.dirty) {
-    await store.setSram(cloud.bytes)
-    await store.setMeta({
-      sha256: cloud.sha256,
-      dirty: false,
-      updatedAt: cloud.updatedAt,
-      language: meta?.language ?? "en",
-    })
-    return "synced"
-  }
-  await pushSram(localBytes)
+  if (!cloud) return "synced"
+  await store.setSram(cloud.bytes)
+  await rememberSync(cloud.sha256, cloud.updatedAt, language)
   return "synced"
 }

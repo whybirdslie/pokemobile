@@ -11,17 +11,17 @@ iPhone 15 Pro PWA for Emerald++. The patched ROM stays off Cloudflare. German na
 ## Done
 
 - Vite app, any-orientation home-screen manifest, service worker, touch layout
-- Chrome is a hamburger menu. Fast and Slow toggle off when tapped again. L and Select sit above the D-pad. Start and R sit above A and B. Portrait picture matches the phone width. Landscape size is a slider in the menu, default 92%, saved on the phone.
+- Chrome is a hamburger menu. Speed is 1.5x, 2x, or 3x in one row, and tapping the active one turns it off. L and Select sit above the D-pad. Start and R sit above A and B. A sits a little left of its usual spot. B stays where it was. Button height is a slider for both orientations, default 150. Portrait picture matches the phone width. Landscape size is a slider in the menu, default 92%, saved on the phone. The hamburger and the phrase box scroll when the phone is horizontal.
 - EmulatorJS 4.2.3 mGBA, threads off, vendored under `public/data`
 - Core boot needs `compression/extract7z.js`, both wasm cores, and `cores/reports/mgba.json` with `defaultWebGL2`
 - Language screen: English names or German names. Menus stay English
 - IndexedDB for the patched ROM and SRAM. Dev server can read the local `.gba`. Production does not
 - Name patch: 689 species, 804 moves, 285 abilities, 587 items, 17 types. Trainer names stay English
-- SRAM uploads while playing and when the app hides. Save states stay on the device
+- SRAM uploads while playing and when the app hides. The save on this phone is the master. A restart never replaces it with an older cloud copy. The phrase only fills a phone that has no save yet. Save states stay on the device
 
 ## Still do in the Supabase dashboard
 
-No account. The game opens on the language screen. Cloud save is a phrase of real words, for example Amber River Lily. The same words on another phone pull that SRAM. The phrase is the key. Worker `pokemobile-saves` stores the file in KV namespace `pokemobile-saves`. R2 was not enabled on the account. Supabase is not used.
+No account. The game opens on the language screen. Cloud save is a phrase of real words, for example Amber River Lily. This phone's save is uploaded to that phrase. Another phone loads it only when that phone has no save yet. Worker `pokemobile-saves` stores the file in KV namespace `pokemobile-saves`. R2 was not enabled on the account. Supabase is not used.
 
 ## Working notes
 

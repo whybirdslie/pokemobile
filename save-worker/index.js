@@ -62,12 +62,11 @@ export default {
     }
 
     if (request.method === "PUT") {
-      const length = Number(request.headers.get("content-length") || "0")
-      if (!length || length > MAX_BYTES) {
+      const bytes = await request.arrayBuffer()
+      if (bytes.byteLength > MAX_BYTES) {
         return withCors(new Response("Save is too large", { status: 413 }), origin)
       }
-      const bytes = await request.arrayBuffer()
-      if (bytes.byteLength < 64 || bytes.byteLength > MAX_BYTES) {
+      if (bytes.byteLength < 64) {
         return withCors(new Response("Save is the wrong size", { status: 400 }), origin)
       }
       const digest = await crypto.subtle.digest("SHA-256", bytes)

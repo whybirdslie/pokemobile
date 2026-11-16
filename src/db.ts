@@ -8,6 +8,8 @@ export interface SaveMeta {
   dirty: boolean
   updatedAt: number
   language: Lang
+  // Last hash confirmed on the phrase. Stays put while this phone's save moves.
+  base?: string
 }
 
 function openDb() {
