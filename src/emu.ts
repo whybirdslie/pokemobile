@@ -115,8 +115,8 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
       },
       { type: "button", text: "L", id: "l", location: "left", left: 0, top: -42, fontSize: 15, bold: true, block: true, input_value: 10 },
       { type: "button", text: "Select", id: "select", location: "left", left: 52, top: -42, fontSize: 13, block: true, input_value: 2 },
-      { type: "button", text: "Start", id: "start", location: "right", left: 0, top: -42, fontSize: 13, block: true, input_value: 3 },
-      { type: "button", text: "R", id: "r", location: "right", left: 86, top: -42, fontSize: 15, bold: true, block: true, input_value: 11 },
+      { type: "button", text: "Start", id: "start", location: "right", left: 28, top: -42, fontSize: 13, block: true, input_value: 3 },
+      { type: "button", text: "R", id: "r", location: "right", left: 114, top: -42, fontSize: 15, bold: true, block: true, input_value: 11 },
     ],
     buttonOpts: {
       playPause: false,
