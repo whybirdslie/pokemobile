@@ -118,13 +118,58 @@ input {
   bottom: 0 !important;
   height: 100% !important;
   pointer-events: none;
+  z-index: 4;
 }
 
-#game .ejs_virtualGamepad_left,
+#game .ejs_virtualGamepad_left {
+  pointer-events: none !important;
+}
+
 #game .ejs_virtualGamepad_right,
-#game .ejs_virtualGamepad_button,
-#game .ejs_dpad_main {
+#game .ejs_virtualGamepad_button {
   pointer-events: auto;
+}
+
+#game .ejs_dpad_main {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+#stick-zone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 46%;
+  height: 100%;
+  z-index: 2;
+  touch-action: none;
+}
+
+#stick-base,
+#stick-knob {
+  position: absolute;
+  display: none;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+#stick-zone.live #stick-base,
+#stick-zone.live #stick-knob {
+  display: block;
+}
+
+#stick-base {
+  width: 118px;
+  height: 118px;
+  background: rgba(8, 16, 12, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+}
+
+#stick-knob {
+  width: 54px;
+  height: 54px;
+  background: rgba(255, 255, 255, 0.9);
 }
 
 #game .ejs_virtualGamepad_top,
@@ -282,19 +327,9 @@ input {
   color: #f3fff6;
 }
 
-#speeds {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-
-#speeds button {
-  text-align: center;
-  padding-inline: 0;
-}
-
 #screen-size,
-#pad-height {
+#pad-height,
+#speed {
   display: grid;
   gap: 4px;
   color: #b7d7c0;
@@ -302,7 +337,8 @@ input {
 }
 
 #screen-size input,
-#pad-height input {
+#pad-height input,
+#speed input {
   width: 100%;
   min-height: 32px;
   padding: 0;

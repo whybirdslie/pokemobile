@@ -1,7 +1,7 @@
 import "./style.css"
 import { cloudConfigured, noteLocalSram, resolveSync, type SyncState } from "./cloud"
 import { store, type Lang } from "./db"
-import { prepareRoms, preloadEmulator, readSram, resumeAudio, startPrepared, toggleSpeed } from "./emu"
+import { commitSpeed, prepareRoms, preloadEmulator, readSram, resumeAudio, setSpeed, startPrepared } from "./emu"
 import { normalizePhrase, showPhrase, suggestPhrase } from "./phrase"
 import { isPatchedEmerald } from "./rom"
 
@@ -256,19 +256,28 @@ document.querySelector<HTMLButtonElement>("#phrase")!.onclick = () => {
   showPhraseModal()
 }
 
-const speedButtons = document.querySelector<HTMLElement>("#speeds")!
-function paintSpeed(rate: number) {
-  speedButtons.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
-    button.setAttribute("aria-pressed", String(Number(button.dataset.rate) === rate))
-  })
+const SPEED_KEY = "emerald-speed"
+
+function speedLabel(tenths: number) {
+  return tenths <= 10 ? "Normal" : `${(tenths / 10).toFixed(1)}x`
 }
-speedButtons.onclick = (event) => {
-  const button = (event.target as HTMLElement | null)?.closest("button")
-  if (!(button instanceof HTMLButtonElement)) return
-  const rate = Number(button.dataset.rate)
-  if (rate !== 1.5 && rate !== 2 && rate !== 3) return
-  paintSpeed(toggleSpeed(rate))
+
+function applySpeed(tenths: number) {
+  const clamped = Math.min(30, Math.max(10, Math.round(tenths)))
+  localStorage.setItem(SPEED_KEY, String(clamped))
+  setSpeed(clamped / 10)
+  const readout = document.querySelector("#speed-readout")
+  const range = document.querySelector<HTMLInputElement>("#speed-range")
+  if (readout) readout.textContent = speedLabel(clamped)
+  if (range && range.value !== String(clamped)) range.value = String(clamped)
 }
+
+const speedRange = document.querySelector<HTMLInputElement>("#speed-range")!
+const savedSpeed = localStorage.getItem(SPEED_KEY)
+const storedSpeed = savedSpeed == null ? 10 : Number(savedSpeed)
+applySpeed(Number.isFinite(storedSpeed) ? storedSpeed : 10)
+speedRange.oninput = () => applySpeed(Number(speedRange.value))
+speedRange.onchange = () => commitSpeed()
 
 const SCALE_KEY = "emerald-land-scale"
 

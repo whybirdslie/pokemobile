@@ -1,5 +1,6 @@
 import { applyUps } from "./ups"
 import type { Lang } from "./db"
+import { attachStick, type Directions } from "./stick"
 
 interface Fs {
   writeFile(path: string, data: Uint8Array): void
@@ -11,6 +12,7 @@ interface GameManager {
   getSaveFile(flush?: boolean): Uint8Array | null
   getSaveFilePath(): string
   loadSaveFiles(): void
+  simulateInput?(player: number, button: number, value: number): void
   FS: Fs
 }
 
@@ -28,7 +30,7 @@ declare global {
 
 let pendingSram: Uint8Array | null = null
 let emu: Emu | null = null
-let speed = 0
+let speed = 1
 let scriptsReady: Promise<void> | null = null
 let prepared: { en: Uint8Array; de: Uint8Array } | null = null
 
@@ -97,11 +99,11 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     threads: false,
     controlScheme: "gba",
     language: "en-US",
-    // L/R/Select/Start/Fast/Slow stay in the bottom strip. Only A/B and the
-    // D-pad sit on the sides of the game.
+    // L/Select sit above the left thumb zone. Start/R sit above A/B.
+    // The cross is hidden. The left half is a floating stick.
     VirtualGamepadSettings: [
       { type: "button", text: "B", id: "b", location: "right", left: 8, top: 78, bold: true, input_value: 0 },
-      { type: "button", text: "A", id: "a", location: "right", left: 56, top: 34, bold: true, input_value: 8 },
+      { type: "button", text: "A", id: "a", location: "right", left: 56, top: 16, bold: true, input_value: 8 },
       {
         type: "dpad",
         id: "dpad",
@@ -138,7 +140,8 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     },
   })
   emu = player
-  speed = 0
+  setSpeed(speed)
+  window.setTimeout(() => setSpeed(speed), 400)
   player.on("saveDatabaseLoaded", (fs) => {
     writeSram(fs as Fs)
   })
@@ -154,7 +157,13 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     target: gesture.target,
   } as unknown as Event)
   document.querySelector("#game .ejs_start_button")?.remove()
+  const root = document.querySelector<HTMLElement>("#game")
+  if (root) {
+    attachStick(root, setDirections)
+    liftFaceButtons()
+  }
   window.setTimeout(() => {
+    setSpeed(speed)
     const mgr = player.gameManager
     if (!mgr || !pendingSram) return
     try {
@@ -189,8 +198,10 @@ export function installSram(bytes: Uint8Array) {
   mgr.loadSaveFiles()
 }
 
-export function toggleSpeed(rate: 1.5 | 2 | 3) {
-  const player = emu as (Emu & {
+let forwarding = false
+
+function speedPlayer() {
+  return emu as (Emu & {
     isFastForward?: boolean
     isSlowMotion?: boolean
     gameManager?: {
@@ -199,23 +210,104 @@ export function toggleSpeed(rate: 1.5 | 2 | 3) {
       setFastForwardRatio?: (ratio: number) => void
     }
   }) | null
-  const next = speed === rate ? 0 : rate
+}
+
+export function setSpeed(rate: number) {
+  const next = Math.min(3, Math.max(1, Math.round(rate * 10) / 10))
+  const player = speedPlayer()
   const mgr = player?.gameManager
-  mgr?.toggleSlowMotion?.(0)
-  mgr?.toggleFastForward?.(0)
-  if (player) {
-    player.isFastForward = next !== 0
-    player.isSlowMotion = false
-  }
   speed = next
-  if (next !== 0) {
-    mgr?.setFastForwardRatio?.(next)
+  if (!mgr?.toggleFastForward || !mgr.setFastForwardRatio) {
+    forwarding = false
+    return next
+  }
+  mgr.toggleSlowMotion?.(0)
+  if (player) player.isSlowMotion = false
+  if (next <= 1) {
+    forwarding = false
+    if (player) player.isFastForward = false
+    mgr?.toggleFastForward?.(0)
+    return 1
+  }
+  mgr?.setFastForwardRatio?.(next)
+  if (player) player.isFastForward = true
+  if (!forwarding) {
+    forwarding = true
     window.setTimeout(() => {
-      if (speed !== next) return
+      if (speed <= 1) return
       mgr?.toggleFastForward?.(1)
     }, 10)
   }
   return speed
+}
+
+export function commitSpeed() {
+  if (speed <= 1) return speed
+  const player = speedPlayer()
+  const mgr = player?.gameManager
+  if (!mgr?.toggleFastForward || !mgr.setFastForwardRatio) return speed
+  forwarding = false
+  if (player) player.isFastForward = true
+  mgr.toggleFastForward(0)
+  mgr.setFastForwardRatio(speed)
+  const turnOn = mgr.toggleFastForward
+  forwarding = true
+  const rate = speed
+  window.setTimeout(() => {
+    if (speed !== rate) return
+    turnOn(1)
+  }, 10)
+  return speed
+}
+
+const padHeld: Directions = { up: 0, down: 0, left: 0, right: 0 }
+const padButton = { up: 4, down: 5, left: 6, right: 7 } as const
+
+export function setDirections(next: Directions) {
+  const mgr = emu?.gameManager
+  if (!mgr?.simulateInput) return
+  ;(Object.keys(padButton) as (keyof Directions)[]).forEach((key) => {
+    const value = next[key] ? 1 : 0
+    if (padHeld[key] === value) return
+    padHeld[key] = value
+    mgr.simulateInput!(0, padButton[key], value)
+  })
+}
+
+const faceButtons: [string, number][] = [
+  [".b_b", 0],
+  [".b_select", 2],
+  [".b_start", 3],
+  [".b_a", 8],
+  [".b_l", 10],
+  [".b_r", 11],
+]
+
+function liftFaceButtons() {
+  const lift = (remaining: TouchList | null) => {
+    const mgr = emu?.gameManager
+    if (!mgr?.simulateInput) return
+    faceButtons.forEach(([sel, id]) => {
+      const el = document.querySelector(`#game ${sel}`)
+      if (!el) return
+      if (!el.classList.contains("ejs_virtualGamepad_button_down")) return
+      let held = false
+      if (remaining) {
+        for (let i = 0; i < remaining.length; i++) {
+          const hit = document.elementFromPoint(remaining[i].clientX, remaining[i].clientY)
+          if (hit && el.contains(hit)) held = true
+        }
+      }
+      if (held) return
+      el.classList.remove("ejs_virtualGamepad_button_down")
+      mgr.simulateInput!(0, id, 0)
+    })
+  }
+  window.addEventListener("touchend", (event) => lift(event.touches))
+  window.addEventListener("touchcancel", () => lift(null))
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") lift(null)
+  })
 }
 
 export function resumeAudio() {
