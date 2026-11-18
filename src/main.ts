@@ -1,7 +1,8 @@
 import "./style.css"
 import { cloudConfigured, noteLocalSram, resolveSync, type SyncState } from "./cloud"
 import { store, type Lang } from "./db"
-import { commitSpeed, prepareRoms, preloadEmulator, readSram, resumeAudio, setSpeed, startPrepared } from "./emu"
+import { prepareRoms, preloadEmulator, readSram, resumeAudio, startPrepared, toggleSpeed } from "./emu"
+import { setStickEnabled } from "./stick"
 import { normalizePhrase, showPhrase, suggestPhrase } from "./phrase"
 import { isPatchedEmerald } from "./rom"
 
@@ -35,6 +36,7 @@ function setMenuOpen(open: boolean) {
 }
 
 function closeMenu() {
+  document.querySelector("#layout")?.removeAttribute("open")
   setMenuOpen(false)
 }
 
@@ -96,7 +98,25 @@ async function showLanguage() {
     return
   }
   const meta = await store.meta()
-  if (meta?.language) language = meta.language
+  if (meta?.language === "en" || meta?.language === "de") {
+    language = meta.language
+    panel(`
+      <div class="panel">
+        <h1>Emerald++</h1>
+        <p id="wait">Getting the game ready.</p>
+      </div>
+    `)
+    const wait = document.querySelector<HTMLElement>("#wait")!
+    try {
+      await prepareRoms(rom)
+    } catch (cause) {
+      wait.textContent = cause instanceof Error ? cause.message : "Could not prepare the game"
+      return
+    }
+    const starter = document.createElement("button")
+    await play({ preventDefault() {}, target: starter } as unknown as Event)
+    return
+  }
   panel(`
     <div class="panel">
       <h1>Emerald++</h1>
@@ -126,16 +146,28 @@ async function showLanguage() {
   }
 }
 
+async function rememberLanguage(next: Lang) {
+  const meta = await store.meta()
+  await store.setMeta({
+    sha256: meta?.sha256 ?? "",
+    dirty: meta?.dirty ?? false,
+    updatedAt: meta?.updatedAt ?? Date.now(),
+    language: next,
+    ...(meta?.base ? { base: meta.base } : {}),
+  })
+}
+
 async function play(event: Event) {
   if (!rom) return
-  const meta = await store.meta()
-  if (meta) await store.setMeta({ ...meta, language })
+  await rememberLanguage(language)
+  const names = document.querySelector("#names")
+  if (names) names.textContent = language === "de" ? "English names" : "German names"
   app.hidden = true
   game.hidden = false
   chrome.hidden = false
   closeMenu()
   await refreshPhraseButton()
-  setStatus((await store.phrase()) ? "Synced" : "On this phone")
+  setStatus("On this phone")
   const sramBuf = await store.sram()
   try {
     startPrepared(language, sramBuf ? new Uint8Array(sramBuf) : null, event)
@@ -152,11 +184,18 @@ async function play(event: Event) {
   timer = window.setInterval(() => void flushSram(), 15000)
 }
 
-async function flushSram() {
+let lastCloudPush = 0
+const CLOUD_GAP = 120000
+
+async function flushSram(force = false) {
   const bytes = readSram()
   if (!bytes) return
-  const changed = await noteLocalSram(bytes, language)
-  if (!changed || !cloudConfigured() || !(await store.phrase())) return
+  await noteLocalSram(bytes, language)
+  if (!cloudConfigured() || !(await store.phrase())) return
+  const meta = await store.meta()
+  if (!meta?.sha256 || meta.base === meta.sha256) return
+  if (!force && Date.now() - lastCloudPush < CLOUD_GAP) return
+  lastCloudPush = Date.now()
   setStatus("Uploading")
   try {
     syncState = await resolveSync()
@@ -246,7 +285,10 @@ document.addEventListener("pointerdown", (event) => {
 document.querySelector<HTMLButtonElement>("#names")!.onclick = () => {
   closeMenu()
   window.clearInterval(timer)
-  void flushSram().finally(() => {
+  const next: Lang = language === "en" ? "de" : "en"
+  void rememberLanguage(next).then(async () => {
+    language = next
+    await flushSram(true)
     location.reload()
   })
 }
@@ -256,28 +298,19 @@ document.querySelector<HTMLButtonElement>("#phrase")!.onclick = () => {
   showPhraseModal()
 }
 
-const SPEED_KEY = "emerald-speed"
-
-function speedLabel(tenths: number) {
-  return tenths <= 10 ? "Normal" : `${(tenths / 10).toFixed(1)}x`
+const speedButtons = document.querySelector<HTMLElement>("#speeds")!
+function paintSpeed(rate: number) {
+  speedButtons.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.rate) === rate))
+  })
 }
-
-function applySpeed(tenths: number) {
-  const clamped = Math.min(30, Math.max(10, Math.round(tenths)))
-  localStorage.setItem(SPEED_KEY, String(clamped))
-  setSpeed(clamped / 10)
-  const readout = document.querySelector("#speed-readout")
-  const range = document.querySelector<HTMLInputElement>("#speed-range")
-  if (readout) readout.textContent = speedLabel(clamped)
-  if (range && range.value !== String(clamped)) range.value = String(clamped)
+speedButtons.onclick = (event) => {
+  const button = (event.target as HTMLElement | null)?.closest("button")
+  if (!(button instanceof HTMLButtonElement)) return
+  const rate = Number(button.dataset.rate)
+  if (rate !== 1.5 && rate !== 2 && rate !== 3) return
+  paintSpeed(toggleSpeed(rate))
 }
-
-const speedRange = document.querySelector<HTMLInputElement>("#speed-range")!
-const savedSpeed = localStorage.getItem(SPEED_KEY)
-const storedSpeed = savedSpeed == null ? 10 : Number(savedSpeed)
-applySpeed(Number.isFinite(storedSpeed) ? storedSpeed : 10)
-speedRange.oninput = () => applySpeed(Number(speedRange.value))
-speedRange.onchange = () => commitSpeed()
 
 const SCALE_KEY = "emerald-land-scale"
 
@@ -315,6 +348,28 @@ const storedScale = saved == null ? 92 : Number(saved)
 applyLandScale(Number.isFinite(storedScale) ? storedScale : 92)
 screenRange.oninput = () => applyLandScale(Number(screenRange.value))
 
+const MOVE_KEY = "emerald-move"
+
+function applyMove(mode: "stick" | "dpad") {
+  document.documentElement.classList.toggle("move-dpad", mode === "dpad")
+  setStickEnabled(mode === "stick")
+  localStorage.setItem(MOVE_KEY, mode)
+  document.querySelectorAll<HTMLButtonElement>("#move button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.move === mode))
+  })
+}
+
+const moveGroup = document.querySelector<HTMLElement>("#move")!
+const savedMove = localStorage.getItem(MOVE_KEY)
+applyMove(savedMove === "dpad" ? "dpad" : "stick")
+moveGroup.onclick = (event) => {
+  const button = (event.target as HTMLElement | null)?.closest("button")
+  if (!(button instanceof HTMLButtonElement)) return
+  const mode = button.dataset.move
+  if (mode !== "stick" && mode !== "dpad") return
+  applyMove(mode)
+}
+
 document.querySelector<HTMLButtonElement>("#export")!.onclick = async () => {
   closeMenu()
   const bytes = readSram() ?? (await store.sram())
@@ -337,7 +392,7 @@ document.querySelector<HTMLButtonElement>("#export")!.onclick = async () => {
 
 document.addEventListener("pointerdown", () => resumeAudio())
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") void flushSram()
+  if (document.visibilityState === "hidden") void flushSram(true)
   else resumeAudio()
 })
 
@@ -355,14 +410,19 @@ async function start() {
   void preloadEmulator()
   const phrase = await store.phrase()
   if (phrase) draft = showPhrase(phrase)
+  const ready = showLanguage()
   if (phrase && cloudConfigured()) {
-    try {
-      syncState = await resolveSync()
-    } catch {
-      syncState = "error"
-    }
+    void resolveSync()
+      .then((state) => {
+        syncState = state
+        if (!chrome.hidden && state === "synced") setStatus("Synced")
+      })
+      .catch(() => {
+        syncState = "error"
+        if (!chrome.hidden) setStatus("Sync failed")
+      })
   }
-  await showLanguage()
+  await ready
 }
 
 void start()

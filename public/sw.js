@@ -1,4 +1,4 @@
-const CACHE = "emerald-v18"
+const CACHE = "emerald-v23"
 const FILES = [
   "/",
   "/index.html",
@@ -40,10 +40,26 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url)
-  if (url.origin !== location.origin) return
-  if (url.pathname.startsWith("/data/") || url.pathname.startsWith("/patch/") || url.pathname.startsWith("/icons/")) {
-    event.respondWith(caches.match(event.request).then((hit) => hit || fetch(event.request)))
+  if (url.origin !== location.origin || event.request.method !== "GET") return
+  const shell = url.pathname.startsWith("/data/") || url.pathname.startsWith("/patch/") || url.pathname.startsWith("/icons/")
+  const put = async (response) => {
+    try {
+      if (response.ok) {
+        const cache = await caches.open(CACHE)
+        await cache.put(new Request(url.href), response.clone())
+      }
+    } catch {
+      /* a partial response cannot be stored */
+    }
+    return response
+  }
+  if (shell) {
+    event.respondWith(caches.match(url.href).then((hit) => hit || fetch(event.request).then(put)))
     return
   }
-  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)))
+  event.respondWith(
+    fetch(event.request)
+      .then(put)
+      .catch(async () => (await caches.match(url.href)) || new Response("", { status: 504 })),
+  )
 })

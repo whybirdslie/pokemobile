@@ -85,14 +85,8 @@ export async function resolveSync(): Promise<SyncState> {
   if (local && local.byteLength >= 64) {
     const localBytes = new Uint8Array(local)
     const localHash = await sha256(localBytes)
-    let cloudHash = ""
-    try {
-      cloudHash = (await pullSram())?.sha256 ?? ""
-    } catch {
-      cloudHash = ""
-    }
-    if (cloudHash === localHash) {
-      await rememberSync(localHash, meta?.updatedAt ?? Date.now(), language)
+    if (syncedBase(meta) === localHash) {
+      if (meta?.dirty) await rememberSync(localHash, meta.updatedAt, language)
       return "synced"
     }
     await pushSram(localBytes)

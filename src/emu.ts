@@ -20,6 +20,11 @@ interface Emu {
   on(event: string, cb: (...args: unknown[]) => void): void
   startButtonClicked(event: Event): void
   gameManager?: GameManager
+  touch?: boolean
+  enableMouseLock?: boolean
+  toggleVirtualGamepad?: (on: boolean) => void
+  changeSettingOption?: (key: string, value: string) => void
+  keyChange?: (event: KeyboardEvent) => void
 }
 
 declare global {
@@ -30,7 +35,7 @@ declare global {
 
 let pendingSram: Uint8Array | null = null
 let emu: Emu | null = null
-let speed = 1
+let speed = 0
 let scriptsReady: Promise<void> | null = null
 let prepared: { en: Uint8Array; de: Uint8Array } | null = null
 
@@ -75,7 +80,21 @@ function writeSram(fs: Fs) {
 
 export async function prepareRoms(rom: Uint8Array) {
   await preloadEmulator()
-  prepared = { en: rom, de: await germanRom(rom) }
+  prepared = {
+    en: keepHmItems(rom),
+    de: keepHmItems(await germanRom(rom)),
+  }
+}
+
+// TM100 is item 0x2A9. HM01-HM08 are 0x2AA-0x2B1 and share the same teach
+// function. That function only keeps the item for ids up to TM100, so using
+// Cut deletes it. Raise the cutoff through HM08.
+function keepHmItems(rom: Uint8Array) {
+  const copy = rom.slice()
+  const view = new DataView(copy.buffer, copy.byteOffset, copy.byteLength)
+  if (view.getUint32(0x122960, true) !== 0x2a9) return copy
+  view.setUint32(0x122960, 0x2b1, true)
+  return copy
 }
 
 export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Event) {
@@ -116,7 +135,7 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
       { type: "button", text: "L", id: "l", location: "left", left: 0, top: -42, fontSize: 15, bold: true, block: true, input_value: 10 },
       { type: "button", text: "Select", id: "select", location: "left", left: 52, top: -42, fontSize: 13, block: true, input_value: 2 },
       { type: "button", text: "Start", id: "start", location: "right", left: 28, top: -42, fontSize: 13, block: true, input_value: 3 },
-      { type: "button", text: "R", id: "r", location: "right", left: 114, top: -42, fontSize: 15, bold: true, block: true, input_value: 11 },
+      { type: "button", text: "R", id: "r", location: "right", left: 104, top: -42, fontSize: 15, bold: true, block: true, input_value: 11 },
     ],
     buttonOpts: {
       playPause: false,
@@ -140,15 +159,20 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     },
   })
   emu = player
-  setSpeed(speed)
-  window.setTimeout(() => setSpeed(speed), 400)
+  speed = 0
   player.on("saveDatabaseLoaded", (fs) => {
     writeSram(fs as Fs)
   })
-  // Click events have no pointerType. On a phone the pad DOM already exists
-  // (hasTouchScreen). Marking this as touch shows it. Doing that on a desktop
-  // crashes setup, because the pad was never built.
-  const touchScreen = navigator.maxTouchPoints > 0 || matchMedia("(any-pointer: coarse)").matches
+  // Click events have no pointerType. A touch screen already built the pad,
+  // and marking the start as touch shows it. A desktop with no touch has no
+  // pad DOM, and forcing touch there crashes setup. An iPad with a Magic
+  // Keyboard still has maxTouchPoints, even though the trackpad is a fine pointer.
+  const touchScreen = touchHardware()
+  const root = document.querySelector<HTMLElement>("#game")
+  if (touchScreen) {
+    root?.classList.add("touch-pad")
+    player.on("start", () => showTouchPad(player))
+  }
   player.startButtonClicked({
     pointerType: touchScreen ? "touch" : "",
     preventDefault() {
@@ -157,13 +181,16 @@ export function startPrepared(lang: Lang, sram: Uint8Array | null, gesture: Even
     target: gesture.target,
   } as unknown as Event)
   document.querySelector("#game .ejs_start_button")?.remove()
-  const root = document.querySelector<HTMLElement>("#game")
   if (root) {
     attachStick(root, setDirections)
     liftFaceButtons()
+    keepKeyboard(player, root)
+    if (touchScreen) {
+      root.tabIndex = -1
+      root.focus()
+    }
   }
   window.setTimeout(() => {
-    setSpeed(speed)
     const mgr = player.gameManager
     if (!mgr || !pendingSram) return
     try {
@@ -198,10 +225,53 @@ export function installSram(bytes: Uint8Array) {
   mgr.loadSaveFiles()
 }
 
-let forwarding = false
+function touchHardware() {
+  return navigator.maxTouchPoints > 0 || matchMedia("(any-pointer: coarse)").matches
+}
 
-function speedPlayer() {
-  return emu as (Emu & {
+function showTouchPad(player: Emu) {
+  player.touch = true
+  player.enableMouseLock = false
+  try {
+    player.changeSettingOption?.("virtual-gamepad", "enabled")
+    player.changeSettingOption?.("lockMouse", "disabled")
+    player.changeSettingOption?.("keyboardInput", "disabled")
+  } catch {
+    /* settings menu may still be opening */
+  }
+  player.toggleVirtualGamepad?.(true)
+}
+
+function typingTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select") !== null)
+}
+
+function keepKeyboard(player: Emu, root: HTMLElement) {
+  const onKey = (event: KeyboardEvent) => {
+    if (!player.keyChange || event.repeat || event.metaKey || event.ctrlKey) return
+    if (typingTarget(event.target) || document.querySelector(".modal")) return
+    if (event.target instanceof Node && root.contains(event.target)) return
+    player.keyChange(event)
+  }
+  window.addEventListener("keydown", onKey)
+  window.addEventListener("keyup", onKey)
+  root.addEventListener("pointerdown", () => {
+    if (typingTarget(document.activeElement)) return
+    root.focus()
+  })
+  // Trackpad movement is a mouse move. That opens the emulator menu bar.
+  root.addEventListener("mousemove", (event) => {
+    event.stopPropagation()
+  }, true)
+  document.addEventListener("pointerlockchange", () => {
+    if (document.pointerLockElement && root.contains(document.pointerLockElement)) {
+      void document.exitPointerLock()
+    }
+  })
+}
+
+export function toggleSpeed(rate: 1.5 | 2 | 3) {
+  const player = emu as (Emu & {
     isFastForward?: boolean
     isSlowMotion?: boolean
     gameManager?: {
@@ -210,53 +280,23 @@ function speedPlayer() {
       setFastForwardRatio?: (ratio: number) => void
     }
   }) | null
-}
-
-export function setSpeed(rate: number) {
-  const next = Math.min(3, Math.max(1, Math.round(rate * 10) / 10))
-  const player = speedPlayer()
+  const next = speed === rate ? 0 : rate
   const mgr = player?.gameManager
+  mgr?.toggleSlowMotion?.(0)
+  mgr?.toggleFastForward?.(0)
+  if (player) {
+    player.isFastForward = next !== 0
+    player.isSlowMotion = false
+  }
   speed = next
-  if (!mgr?.toggleFastForward || !mgr.setFastForwardRatio) {
-    forwarding = false
-    return next
-  }
-  mgr.toggleSlowMotion?.(0)
-  if (player) player.isSlowMotion = false
-  if (next <= 1) {
-    forwarding = false
-    if (player) player.isFastForward = false
-    mgr?.toggleFastForward?.(0)
-    return 1
-  }
-  mgr?.setFastForwardRatio?.(next)
-  if (player) player.isFastForward = true
-  if (!forwarding) {
-    forwarding = true
+  if (next !== 0 && mgr?.setFastForwardRatio && mgr.toggleFastForward) {
+    mgr.setFastForwardRatio(next)
+    const turnOn = mgr.toggleFastForward.bind(mgr)
     window.setTimeout(() => {
-      if (speed <= 1) return
-      mgr?.toggleFastForward?.(1)
+      if (speed !== next) return
+      turnOn(1)
     }, 10)
   }
-  return speed
-}
-
-export function commitSpeed() {
-  if (speed <= 1) return speed
-  const player = speedPlayer()
-  const mgr = player?.gameManager
-  if (!mgr?.toggleFastForward || !mgr.setFastForwardRatio) return speed
-  forwarding = false
-  if (player) player.isFastForward = true
-  mgr.toggleFastForward(0)
-  mgr.setFastForwardRatio(speed)
-  const turnOn = mgr.toggleFastForward
-  forwarding = true
-  const rate = speed
-  window.setTimeout(() => {
-    if (speed !== rate) return
-    turnOn(1)
-  }, 10)
   return speed
 }
 

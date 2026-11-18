@@ -71,6 +71,19 @@ export default {
       }
       const digest = await crypto.subtle.digest("SHA-256", bytes)
       const sha256 = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("")
+      const existing = await env.SAVES.getWithMetadata(key)
+      if (existing.metadata?.sha256 === sha256) {
+        return withCors(
+          new Response(null, {
+            status: 204,
+            headers: {
+              "x-sha256": sha256,
+              "x-updated-at": existing.metadata.updatedAt || "0",
+            },
+          }),
+          origin,
+        )
+      }
       const updatedAt = String(Date.now())
       await env.SAVES.put(key, bytes, { metadata: { sha256, updatedAt } })
       return withCors(

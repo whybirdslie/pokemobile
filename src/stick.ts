@@ -10,6 +10,14 @@ const REACH = 34
 
 const idle: Directions = { up: 0, down: 0, left: 0, right: 0 }
 
+let enabled = true
+let release = () => {}
+
+export function setStickEnabled(on: boolean) {
+  enabled = on
+  if (!on) release()
+}
+
 function aim(dx: number, dy: number): Directions {
   const ax = Math.abs(dx)
   const ay = Math.abs(dy)
@@ -47,6 +55,7 @@ export function attachStick(root: HTMLElement, setDirections: (next: Directions)
     zone.classList.remove("live")
     setDirections(idle)
   }
+  release = hide
 
   const place = (dx: number, dy: number) => {
     const rect = zone.getBoundingClientRect()
@@ -61,7 +70,7 @@ export function attachStick(root: HTMLElement, setDirections: (next: Directions)
   }
 
   zone.addEventListener("pointerdown", (event) => {
-    if (pointer !== -1 || event.button !== 0) return
+    if (!enabled || pointer !== -1 || event.button !== 0) return
     pointer = event.pointerId
     originX = event.clientX
     originY = event.clientY

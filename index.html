@@ -24,18 +24,26 @@
       <div id="menu" hidden>
         <span id="status">On this phone</span>
         <button id="phrase" type="button">Save phrase</button>
-        <label id="speed">Speed
-          <input id="speed-range" type="range" min="10" max="30" step="1" value="10">
-          <span id="speed-readout">Normal</span>
-        </label>
-        <label id="pad-height">Button height
-          <input id="pad-range" type="range" min="20" max="220" value="150">
-          <span id="pad-readout">150</span>
-        </label>
-        <label id="screen-size">Horizontal size
-          <input id="screen-range" type="range" min="70" max="100" value="92">
-          <span id="screen-readout">92%</span>
-        </label>
+        <div id="speeds" role="group" aria-label="Speed">
+          <button type="button" data-rate="1.5" aria-pressed="false">1.5x</button>
+          <button type="button" data-rate="2" aria-pressed="false">2x</button>
+          <button type="button" data-rate="3" aria-pressed="false">3x</button>
+        </div>
+        <details id="layout">
+          <summary>Layout</summary>
+          <div id="move" role="group" aria-label="Movement">
+            <button type="button" data-move="stick" aria-pressed="true">Drag</button>
+            <button type="button" data-move="dpad" aria-pressed="false">D-pad</button>
+          </div>
+          <label id="pad-height">Button height
+            <input id="pad-range" type="range" min="20" max="220" value="150">
+            <span id="pad-readout">150</span>
+          </label>
+          <label id="screen-size">Horizontal size
+            <input id="screen-range" type="range" min="70" max="100" value="92">
+            <span id="screen-readout">92%</span>
+          </label>
+        </details>
         <button id="export" type="button">Save file</button>
         <button id="names" type="button">Names</button>
       </div>
